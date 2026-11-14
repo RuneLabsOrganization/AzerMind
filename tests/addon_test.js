@@ -48,6 +48,7 @@ test('the real action bar snapshot reaches the outgoing question as a separate b
   const text=Buffer.from(vm.evaluate('AzerMindDB.outbox.text'),'hex').toString();
   assert.match(text,/^Reorganiza minhas skills e atalhos\n\n--- Current action bars/);
   assert.match(text,/Main 1 \[slot 61\].*Frostbolt.*Rank 1.*#116.*Q/);
+  assert.equal(vm.evaluate('AzerMind.MessageText("user", AzerMindDB.chats[1].history[#AzerMindDB.chats[1].history].text)'), 'Reorganiza minhas skills e atalhos');
 });
 
 test('an attachment that would overflow the question budget is explicitly omitted',()=>{

@@ -95,6 +95,8 @@ function AzerMind.MessageText(role, text)
 	if role == "user" then
 		local start = text:find("\n\n--- Linked from the game ---", 1, true)
 		if start then text = text:sub(1, start - 1) end
+		start = text:find("\n\n--- Current action bars and keybinds (question-scoped snapshot) ---", 1, true)
+		if start then text = text:sub(1, start - 1) end
 	elseif role == "assistant" then
 		local start = text:find("\n%s*TL;DR:%s*\n")
 		if start and text:sub(1, start - 1):find("%S") then text = text:sub(1, start - 1) end
