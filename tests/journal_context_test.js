@@ -33,6 +33,7 @@ const catalog = `
   AzerMindInstanceData = {
     { id = 10, name = "The Deadmines" },
     { id = 20, name = "Wailing Caverns" },
+    { id = 30, name = "Scarlet Monastery: Graveyard" },
   }
   AzerMind.InstanceByID = function(id)
     for _, record in ipairs(AzerMindInstanceData) do
@@ -60,7 +61,9 @@ test('dungeon links resolve AzerMind IDs and exact names or whole aliases resolv
   const v = journal(catalog);
   for (const [input, name] of [
     ['Upgrades in Deadmines?', 'The Deadmines'],
+    ['Upgrades in VC?', 'The Deadmines'],
     ['Drops in WC?', 'Wailing Caverns'],
+    ['wc?', 'Wailing Caverns'],
     ['Drops in DM West?', 'Dire Maul: West'],
     ['Drops in Dire Maul - East?', 'Dire Maul: East'],
     ['|cff8fc9df|Hazermindinstance:20|h[Some display name]|h|r', 'Wailing Caverns'],
@@ -73,6 +76,34 @@ test('dungeon links resolve AzerMind IDs and exact names or whole aliases resolv
   for (const input of ['Does worldmodel show upgrades?', '|Hitem:123|h[Wailing Caverns Token]|h']) {
     assert.equal(v.value(`AzerMind.ResolveDungeonQuestion(${JSON.stringify(input)}).status`), 'unknown');
   }
+});
+
+test('Portuguese route questions ignore pronouns and other short aliases in prose', () => {
+  const v = journal(catalog);
+  for (const input of [
+    'nao eh isso...\n\neu quero que vc consulte o guia. vale a pena eu ir ate desolace pra entregar regthar deathgate se nao vou upar la?',
+    'vc?',
+  ]) {
+    assert.equal(v.value(`AzerMind.ResolveDungeonQuestion(${JSON.stringify(input)}).status`), 'unknown', input);
+  }
+  v.run('ForeverDungeonJournal_NS.DUNGEON_SEARCH_ALIASES["The Deadmines"] = { "a", "da" }');
+  assert.equal(v.value('AzerMind.ResolveDungeonQuestion("rota da quest?").status'), 'unknown');
+  assert.equal(v.value('AzerMind.ResolveDungeonQuestion("A?").status'), 'unknown');
+});
+
+test('the Scarlet cemitery spelling resolves to the known Graveyard wing', () => {
+  const v = journal(catalog);
+  const input = 'onde vc acha q vou agora? pensei em tpar pra orgrimmar e pegar fly pra thunderbluff pra entregar as quests q tenho daquele lado...\n\nacha q vale eu fazer scarlet cemitery pra tentar dropar a offhand?\n\noq vc acha q eu faco agora';
+  v.run(`R = AzerMind.ResolveDungeonQuestion(${JSON.stringify(input)})`);
+  assert.equal(v.value('R.status'), 'ok');
+  assert.equal(v.value('R.name'), 'Scarlet Monastery: Graveyard');
+  assert.equal(v.value('R.provenance'), 'explicit');
+  assert.equal(v.value('AzerMind.ResolveDungeonQuestion("scarlet cemetery?").name'), 'Scarlet Monastery: Graveyard');
+  assert.equal(v.value('AzerMind.ResolveDungeonQuestion("scarlet graveyard?").name'), 'Scarlet Monastery: Graveyard');
+  assert.equal(v.value('AzerMind.ResolveDungeonQuestion("cemitery?").status'), 'unknown');
+  assert.equal(v.value('AzerMind.ResolveDungeonQuestion("Scarlet Armory?").status'), 'unknown');
+  v.run('table.remove(AzerMindInstanceData, 3)');
+  assert.equal(v.value('AzerMind.ResolveDungeonQuestion("scarlet cemitery?").status'), 'unknown');
 });
 
 test('independent names and colliding aliases are ambiguous', () => {
