@@ -226,6 +226,7 @@ Catalog indexes and detail modules load separately on demand. Lists are paginate
 See [Known issues](docs/KNOWN-ISSUES.md) for documented symptoms, diagnostic steps, workarounds and fix status, including Windows messages stuck on **Sending message**.
 
 GearQuest and Dungeon Journal can supply gear intelligence directly to questions; see [addon integrations](docs/ADDON-INTEGRATIONS.md) for examples, sharing settings and limitations.
+For next-step leveling advice, AzerMind can read a selected RestedXP guide and reconcile it with active quests, completed quests and recorded turn-in locations; see [route intelligence](docs/ROUTE-INTELLIGENCE.md).
 
 | Symptom | Check |
 |---|---|

@@ -95,6 +95,8 @@ function AzerMind.MessageText(role, text)
 	if role == "user" then
 		local start = text:find("\n\n--- Linked from the game ---", 1, true)
 		if start then text = text:sub(1, start - 1) end
+		start = text:find("\n\n--- Route observations ---", 1, true)
+		if start then text = text:sub(1, start - 1) end
 	elseif role == "assistant" then
 		local start = text:find("\n%s*TL;DR:%s*\n")
 		if start and text:sub(1, start - 1):find("%S") then text = text:sub(1, start - 1) end
@@ -1211,7 +1213,7 @@ AzerMind.ContextCategories = {
 	{"position", "Map and exact coordinates"}, {"progress", "Money and XP"},
 	{"talents", "Talent points and ranks"}, {"professions", "Professions and levels"},
 	{"skills", "Other skills and levels"}, {"spells", "Learned spells and ranks"},
-	{"quests", "Active and completed quest IDs"}, {"equipment", "Equipment and GearQuest hunts"},
+	{"quests", "Quests and route progress"}, {"equipment", "Equipment and GearQuest hunts"},
 }
 function AzerMind.ContextOptions(mode)
 	local selected = type(mode) == "table" and mode or (mode == nil and db.settings.contextFields)
@@ -1526,6 +1528,7 @@ function AzerMind.Send(text, allow)
 	-- Shift-clicked links become [Name] plus their tooltip, which is what the agent can read.
 	-- Resolve the player's destination before expanded links introduce other names.
 	local gearContext = Try(AzerMind.GearQuestionContext, text)
+	local routeContext = Try(AzerMind.RouteQuestionContext, text)
 	local links
 	text, links = AzerMind.ExpandLinks(text)
 	local limit = 48000
@@ -1533,6 +1536,13 @@ function AzerMind.Send(text, allow)
 		if #text + #gearContext <= limit then text = text .. gearContext
 		else
 			local omitted = "\n[Addon gear observations omitted: message size limit.]"
+			if #text + #omitted <= limit then text = text .. omitted end
+		end
+	end
+	if type(routeContext) == "string" and routeContext ~= "" then
+		if #text + #routeContext <= limit then text = text .. routeContext
+		else
+			local omitted = "\n[Route observations omitted: message size limit.]"
 			if #text + #omitted <= limit then text = text .. omitted end
 		end
 	end

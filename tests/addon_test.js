@@ -14,6 +14,77 @@ const { lua, lauxlib, lualib, to_luastring, to_jsstring } = fengari;
 const ADDON = path.join(__dirname, '..', 'addon', 'AzerMind');
 const CELLS_PER_ROW = 200;
 
+test('route questions attach fresh sources with consent and isolate missing or oversized adapters',()=>{
+  const vm=newVM(); login(vm); connect(vm);
+  vm.run(`
+    calls=0
+    AzerMind.RestedXPRouteContext=function() calls=calls+1; return "RXP current step: 42" end
+    AzerMind.RouteQuestContext=function() calls=calls+1; return "Quest 1361: ready; finisher in Barrens" end
+    AzerMind.SaveContextSettings({quests=true},true)
+    ROUTE=AzerMind.RouteQuestionContext and AzerMind.RouteQuestionContext("onde vc acha q vou agora?")
+  `);
+  assert.match(vm.evaluate('ROUTE')||'',/RXP current step: 42[\s\S]*finisher in Barrens/);
+  vm.run('ROUTE=AzerMind.RouteQuestionContext("quero que vc consulte o guia. vale a pena eu ir ate desolace pra entregar regthar deathgate se nao vou upar la?")');
+  assert.match(vm.evaluate('ROUTE'),/RXP current step/);
+  vm.run(`
+    calls=0
+    assert(AzerMind.RouteQuestionContext("qual o dano do frostbolt?")=="")
+    AzerMind.SaveContextSettings({quests=false},true)
+    assert(AzerMind.RouteQuestionContext("onde upar?")=="")
+    AzerMind.SaveContextSettings({quests=true},false)
+    assert(AzerMind.RouteQuestionContext("próximos passos?")=="")
+    assert(calls==0)
+    AzerMind.SaveContextSettings({quests=true},true)
+    AzerMind.RestedXPRouteContext=function() error("unsupported client") end
+    AzerMind.RouteQuestContext=function() return string.rep("é",6000) end
+    ROUTE=AzerMind.RouteQuestionContext("qual rota eu faço?")
+  `);
+  assert.match(vm.evaluate('ROUTE'),/unavailable/);
+  assert.match(vm.evaluate('ROUTE'),/size limit/);
+  assert.ok(Buffer.byteLength(vm.evaluate('ROUTE'))<=7200);
+});
+
+test('route evidence is resolved before links, sent to the AI and hidden from player bubbles',()=>{
+  const vm=newVM(); login(vm); connect(vm);
+  vm.run(`
+    AzerMind.RouteQuestionContext=function(text) ROUTE_RAW=text; return "\\n\\n--- Route observations ---\\nQuest 1361 ends in Barrens." end
+    AzerMind.ExpandLinks=function(text) return text.." expanded",1 end
+    AzerMind.Send("onde ir agora?")
+    SENT=AzerMindDB.chats[1].history[#AzerMindDB.chats[1].history].text
+  `);
+  assert.equal(vm.evaluate('ROUTE_RAW'),'onde ir agora?');
+  assert.match(vm.evaluate('SENT'),/expanded\n\n--- Route observations ---\nQuest 1361 ends in Barrens\./);
+  assert.equal(Buffer.from(vm.evaluate('AzerMindDB.outbox.text'),'hex').toString(),vm.evaluate('SENT'));
+  assert.equal(vm.evaluate('AzerMind.MessageText("user",SENT)'),'onde ir agora? expanded');
+});
+
+test('route quest reads preserve unknown progress and bound log scans without changing default callers',()=>{
+  const vm=newVM(); login(vm);
+  vm.run(`
+    C_QuestLog={GetNumQuestLogEntries=function() return 200 end,GetInfo=function(i) return {questID=i,title="Quest "..i} end}
+    LIMITED,PARTIAL=AzerMind.ActiveQuests({limit=2,preserveUnknown=true})
+    DEFAULT=AzerMind.ActiveQuests()
+  `);
+  assert.equal(vm.num('#LIMITED'),2);
+  assert.equal(vm.evaluate('tostring(PARTIAL)'),'true');
+  assert.equal(vm.evaluate('tostring(LIMITED[1].complete)'),'nil');
+  assert.equal(vm.evaluate('tostring(LIMITED[1].objectives)'),'nil');
+  assert.equal(vm.evaluate('tostring(DEFAULT[1].complete)'),'false');
+  vm.run('C_QuestLog={}; LIMITED,PARTIAL=AzerMind.ActiveQuests({limit=40,preserveUnknown=true})');
+  assert.equal(vm.evaluate('tostring(PARTIAL)'),'true');
+  vm.run('C_QuestLog={GetNumQuestLogEntries=function() return 1 end,GetInfo=function() error("log read failed") end}; LIMITED,PARTIAL=AzerMind.ActiveQuests({limit=40,preserveUnknown=true})');
+  assert.equal(vm.evaluate('tostring(PARTIAL)'),'true');
+});
+
+test('route attachments preserve the message budget and original player question',()=>{
+  const vm=newVM(); login(vm); connect(vm);
+  vm.run('AzerMind.RouteQuestionContext=function() return string.rep("x",7000) end; AzerMind.Send(string.rep("a",47900))');
+  const text=Buffer.from(vm.evaluate('AzerMindDB.outbox.text'),'hex').toString();
+  assert.ok(text.startsWith('a'.repeat(47900)));
+  assert.ok(text.includes('Route observations omitted: message size limit'));
+  assert.ok(Buffer.byteLength(text)<=48000);
+});
+
 test('grimoire materials reach actual chat widgets and repeat at native size on resize',()=>{
   const vm=newVM(); login(vm);
   vm.run(`
@@ -187,7 +258,7 @@ function newVM() {
   };
   const num = (expr) => Number(evaluate(expr));
   run(fs.readFileSync(path.join(__dirname, 'wow_stub.lua'), 'utf8'));
-  for (const f of ['Codec.lua', 'Inbox.lua', 'Theme.lua', 'AzerMind.lua', 'TalentContext.lua', 'Links.lua', 'Settings.lua', 'Quests.lua', 'Catalog.lua', 'Auction.lua', 'Items.lua', 'InstancesData.lua', 'Instances.lua', 'GearQuestContext.lua', 'JournalContext.lua', 'GearIntelligence.lua']) run(fs.readFileSync(path.join(ADDON, f), 'utf8'), 'AzerMind');
+  for (const f of ['Codec.lua', 'Inbox.lua', 'Theme.lua', 'AzerMind.lua', 'TalentContext.lua', 'Links.lua', 'Settings.lua', 'Quests.lua', 'Catalog.lua', 'Auction.lua', 'Items.lua', 'InstancesData.lua', 'Instances.lua', 'GearQuestContext.lua', 'JournalContext.lua', 'GearIntelligence.lua', 'RestedXPContext.lua', 'RouteQuestContext.lua', 'RouteContext.lua']) run(fs.readFileSync(path.join(ADDON, f), 'utf8'), 'AzerMind');
   return { run, evaluate, num };
 }
 
@@ -1348,7 +1419,7 @@ test('completed quest context distinguishes delivered quests from the active que
   assert.match(context, /^Quest log \(id, \* = ready to turn in\): 101\*,102\n/);
   assert.ok(context.includes('Completed quest IDs (delivered; 3/3 shown): 2,44,99'));
   assert.equal(vm.num('ACCOUNT_HISTORY_CALLS'), 0);
-  assert.equal(vm.evaluate('(function() for _, field in ipairs(AzerMind.ContextCategories) do if field[1]=="quests" then return field[2] end end end)()'), 'Active and completed quest IDs');
+  assert.equal(vm.evaluate('(function() for _, field in ipairs(AzerMind.ContextCategories) do if field[1]=="quests" then return field[2] end end end)()'), 'Quests and route progress');
 });
 
 test('completed quest context reports unavailable APIs and errors without claiming an empty history', () => {
