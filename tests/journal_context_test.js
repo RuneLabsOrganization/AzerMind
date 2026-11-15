@@ -63,6 +63,7 @@ test('dungeon links resolve AzerMind IDs and exact names or whole aliases resolv
     ['Upgrades in Deadmines?', 'The Deadmines'],
     ['Upgrades in VC?', 'The Deadmines'],
     ['Drops in WC?', 'Wailing Caverns'],
+    ['tem drops em wc?', 'Wailing Caverns'],
     ['wc?', 'Wailing Caverns'],
     ['Drops in DM West?', 'Dire Maul: West'],
     ['Drops in Dire Maul - East?', 'Dire Maul: East'],

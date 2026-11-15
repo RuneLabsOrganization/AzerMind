@@ -94,8 +94,9 @@ function AzerMind.ResolveDungeonQuestion(rawText)
     local function Match(name, alias, journalAlias)
         local phrase = Normalize(alias)
         if phrase == "" then return end
-        local shortAlias = journalAlias and #phrase <= 3 and phrase:match("^%a+$")
-        if shortAlias and #phrase == 1 then return end
+        if journalAlias and #phrase == 1 then return end
+        local ordinaryWords = {vc=true,da=true,de=true,["do"]=true,as=true,os=true,em=true,no=true,na=true,se=true}
+        local shortAlias = journalAlias and ordinaryWords[phrase]
         -- Short journal search terms can also be ordinary words, including Portuguese "vc" (you).
         local allowBareAlias = phrase ~= "vc"
         phrase = " " .. phrase .. " "

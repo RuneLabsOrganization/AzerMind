@@ -4,7 +4,7 @@ AzerMind can attach current GearQuest hunts and matching Dungeon Journal sources
 
 For example: **"Vou Dalaran. Tem itens que o GearQuest recomenda para mim?"** The installed journal's aliases identify City of Dalaran. An attached AzerMind dungeon link also works. Inside a party or raid instance, questions about items or drops can use the actual current instance. A journal page being viewed is never assumed to be a planned destination. If the destination is missing or ambiguous, the AI receives that limitation instead of a guessed dungeon.
 
-Use uppercase for short dungeon abbreviations in a sentence, such as **WC** or **VC**, so ordinary words like the Portuguese **vc** do not select a dungeon.
+Common abbreviations such as **wc** work in either case. Aliases that are ordinary Portuguese words, such as **vc**, require uppercase (**VC**) to indicate a dungeon; lowercase **vc** never selects Deadmines.
 
 ## What is shared
 
