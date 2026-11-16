@@ -103,6 +103,25 @@ test('character Save and Cancel preserve category, consent and persisted values'
  `);
 });
 
+test('inventory context defaults to off and commits only on Save',t=>{
+ const vm=boot(t);
+ vm.run(`
+  assert(AzerMind.InventoryContextMode()=="off")
+  AzerMind.ShowContextSettings()
+  local p=AzerMindContextSettings
+  assert(p.inventorySelector.value=="off")
+  p.inventoryMode="summary";p.dirty=true;p.Refresh()
+  assert(AzerMind.InventoryContextMode()=="off")
+  for _,button in ipairs(p.children) do if button.text=="Cancel" then button.scripts.OnClick() end end
+  assert(p.inventoryMode=="off")
+  p.inventoryMode="full";p.dirty=true
+  for _,button in ipairs(p.children) do if button.text=="Save" then button.scripts.OnClick() end end
+  assert(AzerMind.InventoryContextMode()=="full")
+  p.inventoryMode="summary";p.dirty=true
+  for _,button in ipairs(p.children) do if button.text=="Cancel" then button.scripts.OnClick() end end
+  assert(p.inventoryMode=="full")
+ `);
+});
 test('guide list edits and removals remain drafts until Save, and Cancel restores exact variants',t=>{
  const vm=boot(t);
  vm.run(`
