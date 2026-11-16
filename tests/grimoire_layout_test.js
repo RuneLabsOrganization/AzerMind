@@ -1,6 +1,36 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
 const boot=require('./helpers/grimoire-vm');
+test('composer starts at viewport width and reflows on resize and text changes',t=>{
+  const vm=boot(t);
+  assert.equal(vm.num('AzerMindInput:GetWidth()'),vm.num('AzerMindInputScroll:GetWidth()'));
+  vm.run(`
+    AzerMindInputScroll:SetWidth(260)
+    for _,fn in ipairs(AzerMindInputScroll.hooks.OnSizeChanged or {}) do fn(AzerMindInputScroll,260,80) end
+  `);
+  assert.equal(vm.num('AzerMindInput:GetWidth()'),260);
+  vm.run(`
+    AzerMindInputScroll:SetWidth(210)
+    AzerMindInput:SetText(string.rep("a long question ",40))
+    for _,fn in ipairs(AzerMindInput.hooks.OnTextChanged or {}) do fn(AzerMindInput) end
+  `);
+  assert.equal(vm.num('AzerMindInput:GetWidth()'),210);
+  assert.equal(vm.num('AzerMindInputScroll.parent.draftMeasure:GetWidth()'),210);
+});
+
+test('composer follows the caret down and back up without losing the draft',t=>{
+  const vm=boot(t);
+  vm.run(`
+    AzerMindInputScroll:SetHeight(80)
+    AzerMindInput:SetHeight(400)
+    AzerMindInput:SetText("Keep this draft")
+    AzerMindInput.scripts.OnCursorChanged(AzerMindInput,0,-280,1,20)
+  `);
+  assert.equal(vm.num('AzerMindInputScroll:GetVerticalScroll()'),224);
+  vm.run('AzerMindInput.scripts.OnCursorChanged(AzerMindInput,0,-20,1,20)');
+  assert.equal(vm.num('AzerMindInputScroll:GetVerticalScroll()'),16);
+  assert.equal(vm.value('AzerMindInput:GetText()'),'Keep this draft');
+});
 for(const [width,height] of [[900,600],[1180,830],[1600,1000]]) {
   test(`real anchor graph keeps composer, toolbar and protected corners within ${width}x${height}`,t=>{
     const vm=boot(t);

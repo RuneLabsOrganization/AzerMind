@@ -3429,8 +3429,20 @@ local function BuildUI()
 	end)
 	input:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 	inScroll:SetScrollChild(input)
-	inScroll:HookScript("OnSizeChanged", function(self, w, h)
-		input:SetWidth(w)
+	local function KeepDraftCursorVisible()
+		if not input.cursorTop then return end
+		local height = inScroll:GetHeight()
+		if height <= 0 then return end
+		local top = math.max(0, input.cursorTop - 4)
+		local bottom = input.cursorTop + input.cursorHeight + 4
+		local offset = inScroll:GetVerticalScroll()
+		if top < offset then offset = top
+		elseif bottom > offset + height then offset = bottom - height end
+		inScroll:SetVerticalScroll(math.max(0, math.min(offset, math.max(0, input:GetHeight() - height))))
+	end
+	input:SetScript("OnCursorChanged", function(self, x, y, width, height)
+		self.cursorTop, self.cursorHeight = -y, height
+		KeepDraftCursorVisible()
 	end)
 	inputBg:SetScript("OnMouseDown", function() input:SetFocus() end)
 	if AzerMindTheme and AzerMindTheme.grimoire then
@@ -3497,13 +3509,21 @@ local function BuildUI()
 	measure:SetWordWrap(true); measure:Hide()
 	inputBg.draftMeasure=measure
 	local function FitDraft()
-		measure:SetWidth(math.max(80,inScroll:GetWidth()))
+		local width = inScroll:GetWidth()
+		if width <= 0 then return end
+		-- Set the actual edit width before the first keystroke, not only after a
+		-- resize event. A wider scroll child clips text instead of wrapping it.
+		input:SetWidth(width)
+		measure:SetWidth(width)
 		measure:SetText((input:GetText() or "").." ")
 		local height=math.max(112,math.min(180,f:GetHeight()*0.30,measure:GetStringHeight()+48))
 		if inputBg:GetHeight()~=height then inputBg:SetHeight(height) end
+		input:SetHeight(math.max(inScroll:GetHeight(),measure:GetStringHeight()+8))
+		KeepDraftCursorVisible()
 		LayoutComposerActions()
 	end
 	input:HookScript("OnTextChanged",FitDraft)
+	inScroll:HookScript("OnSizeChanged",FitDraft)
 	f:HookScript("OnSizeChanged",FitDraft)
 	FitDraft()
 
