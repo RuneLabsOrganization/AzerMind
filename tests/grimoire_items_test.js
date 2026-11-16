@@ -34,3 +34,27 @@ test('item tree separates family and subtype IDs, expands without losing filters
  `);
  assert.equal(vm.value('P.subtypeSelector'),'nil');
 });
+
+test('item window reserves separate tree, result, paging and selection regions and fits smaller screens',t=>{
+ const vm=fixture(t);
+ vm.run(fs.readFileSync(path.join(__dirname,'helpers/grimoire-geometry.lua'),'utf8'));
+ vm.run(`
+  assert(P.grimoireFrame.name=='frame-window','item window lacks outer frame')
+  local tree,list=GR_Bounds(P.categoryScroll),GR_Bounds(P.scroll)
+  assert(tree.right+30<=list.left,'category scrollbar crowds results')
+  local previous,next=GR_Bounds(P.previous),GR_Bounds(P.next)
+  assert(previous.top<list.bottom and next.top<list.bottom,'paging overlaps results')
+  local insert=GR_Bounds(P.insert)
+  for _,button in ipairs(P.children) do
+   if button.text=='Select page' or button.text=='Select all results' or button.text=='Clear selection' then
+    local b=GR_Bounds(button);assert(b.top<previous.bottom and b.bottom>insert.top,'selection actions mixed with search or footer')
+   end
+  end
+  for _,size in ipairs({{900,600},{1280,720},{1920,1080}}) do
+   UIParent:SetSize(size[1],size[2])
+   for _,fn in ipairs(UIParent.hooks.OnSizeChanged or {}) do fn(UIParent,size[1],size[2]) end
+   assert(P:GetWidth()*P:GetScale()<=size[1]-32,'window exceeds screen width')
+   assert(P:GetHeight()*P:GetScale()<=size[2]-32,'window exceeds screen height')
+  end
+ `);
+});

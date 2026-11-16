@@ -125,10 +125,10 @@ reachable. Visual check: indentation, arrow targets, readable labels and scroll.
 
 ### 2. Window and layout
 
-- [ ] Add the outer frame and group source/search/filter/result/selection areas.
-- [ ] Widen the category column and results; reserve scrollbar gutters.
-- [ ] Normalize row heights, pointer targets, headings and footer positions.
-- [ ] Verify keyboard focus and Escape; leave native/protected game actions alone.
+- [x] Add the outer frame and group source/search/filter/result/selection areas.
+- [x] Widen the category column and results; reserve scrollbar gutters.
+- [x] Normalize row heights, pointer targets, headings and footer positions.
+- [x] Verify keyboard focus and Escape; leave native/protected game actions alone.
 
 Automated checks: control bounds at supported screens, scrolling/clipping,
 singular close, no footer overlap, no row allocation growth. Visual check: actual
@@ -194,3 +194,5 @@ category semantics and stage checks; stable identity/quantity reconciliation and
 search-versus-payload separation were made explicit above.
 
 Iteration 1: category-tree regression and four existing inventory/catalog regressions passed. Lua checks passed. Client visual review remains pending.
+
+Iteration 2: framed 920x660 layout, location selector, reserved category/result gutters and fixed selection footer passed geometry tests at three screen sizes, five item/auction tests and three existing picker compatibility checks. Client visual review remains pending.

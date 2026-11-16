@@ -2060,7 +2060,7 @@ test('database ownership, numeric required-level range, subtype and reset compos
  [3]={name="Potion",requiredLevel=30,classID=0,subclassID=1}},quests={},npcs={},objects={}}
  AzerMind.OwnedItems=function() return {{key="owned:1",id=1,link="item:1",location="Bags",name="Cloth legs",kind="",subtype="",slot="",count=1}} end
  AzerMind.ShowItemPicker()
- function ItemClick(label) for _,b in ipairs(AzerMindItemPicker.children) do if b.text==label then b.scripts.OnClick(b); return end end; error("missing "..label) end
+ function ItemClick(label) if label=="All" or label=="Equipped" or label=="Bags" or label=="Bank" then AzerMindItemPicker.SetLocation(label);return end; for _,b in ipairs(AzerMindItemPicker.children) do if b.text==label then b.scripts.OnClick(b); return end end; error("missing "..label) end
  ItemClick("Item database"); ItemClick("Bags")
  `);
  assert.equal(vm.num('#AzerMindItemPicker.visible'),1);
