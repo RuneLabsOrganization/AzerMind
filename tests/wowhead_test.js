@@ -4,6 +4,13 @@ const assert = require('node:assert/strict');
 const W = require('../bridge/wowhead');
 const P = require('../bridge/protocol');
 const context = 'Game: World of Warcraft: Forever (client 1.60.1)';
+test('next-step policy prioritizes observed guide progress and actual quest endpoints',()=>{
+  const prompt=P.systemPrompt(context,'');
+  assert.match(prompt,/Prefer attached route observations/);
+  assert.match(prompt,/quest category is not.*turn-in destination/);
+  assert.match(prompt,/Do not assume learned flight paths/);
+  assert.match(prompt,/local suggestion.*not.*optimal/);
+});
 test('Forever policy applies to new and resumed context, not unrelated clients', () => {
   assert.ok(P.systemPrompt(context, '').includes('site:wowhead.com/forever/'));
   assert.ok(P.systemPrompt(context, '').includes('Never silently substitute'));

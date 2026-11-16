@@ -227,6 +227,7 @@ See [Known issues](docs/KNOWN-ISSUES.md) for documented symptoms, diagnostic ste
 
 GearQuest and Dungeon Journal can supply gear intelligence directly to questions; see [addon integrations](docs/ADDON-INTEGRATIONS.md) for examples, sharing settings and limitations.
 For ability and hotkey organization, AzerMind can attach learned spells and the current default bars to relevant questions; see [spell and action bar context](docs/ACTION-BAR-CONTEXT.md).
+For next-step leveling advice, AzerMind can read a selected RestedXP guide and reconcile it with active quests, completed quests and recorded turn-in locations; see [route intelligence](docs/ROUTE-INTELLIGENCE.md).
 
 | Symptom | Check |
 |---|---|

@@ -97,6 +97,8 @@ function AzerMind.MessageText(role, text)
 		if start then text = text:sub(1, start - 1) end
 		start = text:find("\n\n--- Current action bars and keybinds (question-scoped snapshot) ---", 1, true)
 		if start then text = text:sub(1, start - 1) end
+		start = text:find("\n\n--- Route observations ---", 1, true)
+		if start then text = text:sub(1, start - 1) end
 	elseif role == "assistant" then
 		local start = text:find("\n%s*TL;DR:%s*\n")
 		if start and text:sub(1, start - 1):find("%S") then text = text:sub(1, start - 1) end
@@ -1213,7 +1215,7 @@ AzerMind.ContextCategories = {
 	{"position", "Map and exact coordinates"}, {"progress", "Money and XP"},
 	{"talents", "Talent points and ranks"}, {"professions", "Professions and levels"},
 	{"skills", "Other skills and levels"}, {"spells", "Spells, action bars and hotkeys"},
-	{"quests", "Active and completed quest IDs"}, {"equipment", "Equipment and GearQuest hunts"},
+	{"quests", "Quests and route progress"}, {"equipment", "Equipment and GearQuest hunts"},
 }
 function AzerMind.ContextOptions(mode)
 	local selected = type(mode) == "table" and mode or (mode == nil and db.settings.contextFields)
@@ -1529,6 +1531,7 @@ function AzerMind.Send(text, allow)
 	-- Resolve the player's destination before expanded links introduce other names.
 	local gearContext = Try(AzerMind.GearQuestionContext, text)
 	local actionBarContext = Try(AzerMind.ActionBarQuestionContext, text)
+	local routeContext = Try(AzerMind.RouteQuestionContext, text)
 	local links
 	text, links = AzerMind.ExpandLinks(text)
 	local limit = 48000
@@ -1543,6 +1546,13 @@ function AzerMind.Send(text, allow)
 		if #text + #actionBarContext <= limit then text = text .. actionBarContext
 		else
 			local omitted = "\n[Action bar observations omitted: message size limit.]"
+			if #text + #omitted <= limit then text = text .. omitted end
+		end
+	end
+	if type(routeContext) == "string" and routeContext ~= "" then
+		if #text + #routeContext <= limit then text = text .. routeContext
+		else
+			local omitted = "\n[Route observations omitted: message size limit.]"
 			if #text + #omitted <= limit then text = text .. omitted end
 		end
 	end

@@ -4,7 +4,7 @@
 ## Author: AzerMind contributors; original wow-ai by chelinho139
 ## Version: 0.5.0
 ## SavedVariables: AzerMindDB, AzerMindMapDB, AzerMindItemsDB
-## OptionalDeps: AzerMind_Nodes, AHledger, GearQuestForever, ForeverDungeonJournal
+## OptionalDeps: AzerMind_Nodes, AHledger, GearQuestForever, ForeverDungeonJournal, RXPGuides
 
 Codec.lua
 Inbox.lua
@@ -23,4 +23,7 @@ Instances.lua
 GearQuestContext.lua
 JournalContext.lua
 GearIntelligence.lua
+RestedXPContext.lua
+RouteQuestContext.lua
+RouteContext.lua
 Map.lua

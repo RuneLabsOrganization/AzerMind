@@ -10,27 +10,38 @@ end
 function AzerMind.ShowQuestLocationMenu(anchor,options,selected,onSelect)
  T.ShowChoiceMenu(anchor,options,selected,onSelect,"Search locations")
 end
-function AzerMind.ActiveQuests()
+function AzerMind.ActiveQuests(options)
 	local api = C_QuestLog or {}
-	local count = Read(api.GetNumQuestLogEntries) or Read(GetNumQuestLogEntries) or 0
+	local bounded = type(options) == "table"
+	local reported = Read(api.GetNumQuestLogEntries) or Read(GetNumQuestLogEntries)
+	local count = type(reported) == "number" and reported >= 0 and reported < math.huge and math.floor(reported) or 0
+	local partial = bounded and (type(reported) ~= "number" or reported ~= count or count > 100) or false
+	local limit = bounded and math.max(1, math.min(tonumber(options.limit) or 40, 40)) or math.huge
+	local preserve = bounded and options.preserveUnknown
 	local result, seen, zone = {}, {}, ""
-	for index = 1, count do
+	for index = 1, (bounded and math.min(count, 100) or count) do
 		local info = Read(api.GetInfo, index)
 		if type(info) ~= "table" then
 			local title, level, _, header, _, complete, _, id = Read(GetQuestLogTitle, index)
 			info = {title=title, level=level, isHeader=header, isComplete=complete == 1, questID=id}
+			if preserve and complete == nil then info.isComplete = nil end
 		end
 		if info.isHeader then zone = info.title or ""
 		elseif type(info.questID) == "number" and info.questID > 0 and not seen[info.questID] then
 			seen[info.questID] = true
             local complete=Read(api.IsComplete,info.questID)
             if complete==nil then complete=info.isComplete end
+			local readiness = complete==true or complete==1
+			if preserve and complete==nil then readiness=nil end
+			local objectives=Read(api.GetQuestObjectives,info.questID)
+			if not preserve then objectives=objectives or {} end
 			table.insert(result, {id=info.questID, title=info.title or ("Quest " .. info.questID), level=info.level,
-				zone=zone, complete=complete==true or complete==1,
-				objectives=Read(api.GetQuestObjectives, info.questID) or {}})
+				zone=zone, complete=readiness, objectives=objectives})
+			if #result>=limit then partial=partial or index<count; break end
+		elseif bounded then partial=true
 		end
 	end
-	return result
+	return result, partial
 end
 function AzerMind.QuestSelectionText(quests, selected)
 	local lines = {}
