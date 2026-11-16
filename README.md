@@ -154,6 +154,10 @@ Guide pages are not downloaded or bundled by the bridge. Access failures, unavai
 
 Selections can persist across pages and filters: check the selected count. Database entries are reference records, not owned items or accepted quests. Item fields can depend on the client cache. Missing records are not invented, and snapshot content is not a live opening or loot guarantee.
 
+In **Items**, expand a category with its arrow (for example, **Armor > Cloth**), or click its name to filter results. Search accepts words, an exact item ID or an item link. Use **Filters** to clear individual filters, or **Reset filters** to start again without losing your selection. Results can be sorted by name, rarity, required level or location.
+
+**Review selected** includes items hidden by the current filters and returns you to your previous browsing position when closed. Inventory and database selections remain separate. Select up to 100 items; **Add to message** inserts them into the draft without sending it. Bank entries use the last available snapshot, and unavailable items are removed from the selection when inventory refreshes.
+
 Right-click a quest link to mark an available objective or turn-in on the map. Multiple locations open a chooser. Missing coordinates are not guessed, and manual marks do not automatically track progress.
 
 Focus the input and shift-click supported items, spells, quests or links to attach them. Attachments expand to reference data when sent. Click a reply or `/azermind copy` to copy it. Use `/ai <text>` or the `[reply]` link to answer the agent. `/r` remains the game's normal whisper reply; AzerMind does not intercept native chat command handlers.

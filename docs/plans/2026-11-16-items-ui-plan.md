@@ -171,12 +171,12 @@ Visual check: review mixed selections and confirm what Add to message includes.
 
 ### 6. Integrated review and delivery
 
-- [ ] Exercise the full flow on My items and Item database.
-- [ ] Run appropriate focused regressions after each stage; run the full suite,
+- [x] Exercise the full flow on My items and Item database.
+- [x] Run appropriate focused regressions after each stage; run the full suite,
   Lua checks and codec cases after integration, then review the final diff.
-- [ ] Update usage docs and register new UI tests in normal/release checks.
-- [ ] Commit verified stages; install with backup and verify installed files.
-- [ ] Record the in-game result separately from automated test results.
+- [x] Update usage docs and register new UI tests in normal/release checks.
+- [x] Commit verified stages; install with backup and verify installed files.
+- [x] Record the in-game result separately from automated test results.
 
 ## Checkpoint rule
 
@@ -202,3 +202,5 @@ Iteration 3: four focused item regressions and three compatibility checks passed
 Iteration 4: six item regressions plus four auction regressions passed. Stable Name/Rarity/Level/Location sorting, readable rows, independent matched/page counters and source inspection are checked. The 2,000-item fixture keeps at most six result rows and does not rescan filters on scrolling. Client visual review remains pending.
 
 Iteration 5: eleven item regressions plus four auction regressions passed, as did four existing inventory/catalog checks. Review includes hidden selections and restores browse position. Bulk selection is atomic at 100; attachment refresh preserves exact payloads, updated quantities, bank age, auction attribution and original-chat/byte guards. Client visual review remains pending.
+
+Iteration 6: full suite passed (331 tests, zero failures), Lua/order checks and all codec round-trip/rejection cases passed. New Items regressions are registered in normal and release UI checks. Final diff preserves previous Settings, guides, composer, theme and auction code. Installed with backup backups/grimoire/2026-11-16T04-35-30-100Z-ddccc94d; verification checked 170 addon files with zero missing/outdated. Actual client visual review remains PENDING: simulator geometry is not font/texture/occlusion approval. Reload WoW and review both item sources, expanded categories and selection footer.
