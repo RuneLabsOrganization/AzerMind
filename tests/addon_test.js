@@ -14,6 +14,53 @@ const { lua, lauxlib, lualib, to_luastring, to_jsstring } = fengari;
 const ADDON = path.join(__dirname, '..', 'addon', 'AzerMind');
 const CELLS_PER_ROW = 200;
 
+test('send resolves action bar evidence from the raw question before expanding links',()=>{
+  const vm=newVM(); login(vm); connect(vm);
+  vm.run(`
+    AzerMind.ActionBarQuestionContext=function(text) RAW_BAR_QUERY=text; return "\\n\\n--- Action bar fixture ---\\nMain 1: Frostbolt; keys=Q,SHIFT-Q" end
+    AzerMind.GearQuestionContext=function() return "\\nGear fixture" end
+    AzerMind.ExpandLinks=function(text) return text.." [expanded tooltip]",1 end
+    AzerMind.Send("Reorganiza minhas skills e atalhos")
+  `);
+  assert.equal(vm.evaluate('RAW_BAR_QUERY'),'Reorganiza minhas skills e atalhos');
+  const text=Buffer.from(vm.evaluate('AzerMindDB.outbox.text'),'hex').toString();
+  assert.match(text,/\[expanded tooltip\][\s\S]*Gear fixture[\s\S]*Main 1: Frostbolt; keys=Q,SHIFT-Q/);
+  assert.equal(text,vm.evaluate('AzerMindDB.chats[1].history[#AzerMindDB.chats[1].history].text'));
+});
+
+test('an action bar adapter error cannot prevent the player sending a question',()=>{
+  const vm=newVM(); login(vm); connect(vm);
+  vm.run('AzerMind.ActionBarQuestionContext=function() error("API failed") end; AzerMind.Send("minhas barras")');
+  assert.ok(vm.num('AzerMindDB.chats[1].pendingId')>0);
+  assert.equal(Buffer.from(vm.evaluate('AzerMindDB.outbox.text'),'hex').toString(),'minhas barras');
+});
+
+test('the real action bar snapshot reaches the outgoing question as a separate block',()=>{
+  const vm=newVM(); login(vm); connect(vm);
+  vm.run(`
+    AzerMind.SaveContextSettings({spells=true},true)
+    ActionButton1={action=61,IsVisible=function() return true end}
+    GetActionInfo=function() return "spell",116 end
+    C_Spell={GetSpellName=function() return "Frostbolt" end,GetSpellSubtext=function() return "Rank 1" end}
+    GetBindingKey=function(command) if command=="ACTIONBUTTON1" then return "Q" end end
+    AzerMind.Send("Reorganiza minhas skills e atalhos")
+  `);
+  const text=Buffer.from(vm.evaluate('AzerMindDB.outbox.text'),'hex').toString();
+  assert.match(text,/^Reorganiza minhas skills e atalhos\n\n--- Current action bars/);
+  assert.match(text,/Main 1 \[slot 61\].*Frostbolt.*Rank 1.*#116.*Q/);
+  assert.equal(vm.evaluate('AzerMind.MessageText("user", AzerMindDB.chats[1].history[#AzerMindDB.chats[1].history].text)'), 'Reorganiza minhas skills e atalhos');
+});
+
+test('an attachment that would overflow the question budget is explicitly omitted',()=>{
+  const vm=newVM(); login(vm); connect(vm);
+  vm.run('AzerMind.ActionBarQuestionContext=function() return string.rep("X",500) end; AzerMind.Send(string.rep("a",47900))');
+  const text=Buffer.from(vm.evaluate('AzerMindDB.outbox.text'),'hex').toString();
+  assert.ok(text.startsWith('a'.repeat(47900)));
+  assert.ok(text.includes('Action bar observations omitted: message size limit'));
+  assert.ok(Buffer.byteLength(text)<=48000);
+  assert.ok(vm.num('AzerMindDB.chats[1].pendingId')>0);
+});
+
 test('grimoire materials reach actual chat widgets and repeat at native size on resize',()=>{
   const vm=newVM(); login(vm);
   vm.run(`
@@ -187,7 +234,7 @@ function newVM() {
   };
   const num = (expr) => Number(evaluate(expr));
   run(fs.readFileSync(path.join(__dirname, 'wow_stub.lua'), 'utf8'));
-  for (const f of ['Codec.lua', 'Inbox.lua', 'Theme.lua', 'AzerMind.lua', 'TalentContext.lua', 'Links.lua', 'Settings.lua', 'Quests.lua', 'Catalog.lua', 'Auction.lua', 'Items.lua', 'InstancesData.lua', 'Instances.lua', 'GearQuestContext.lua', 'JournalContext.lua', 'GearIntelligence.lua']) run(fs.readFileSync(path.join(ADDON, f), 'utf8'), 'AzerMind');
+  for (const f of ['Codec.lua', 'Inbox.lua', 'Theme.lua', 'AzerMind.lua', 'TalentContext.lua', 'ActionBarContext.lua', 'Links.lua', 'Settings.lua', 'Quests.lua', 'Catalog.lua', 'Auction.lua', 'Items.lua', 'InstancesData.lua', 'Instances.lua', 'GearQuestContext.lua', 'JournalContext.lua', 'GearIntelligence.lua']) run(fs.readFileSync(path.join(ADDON, f), 'utf8'), 'AzerMind');
   return { run, evaluate, num };
 }
 

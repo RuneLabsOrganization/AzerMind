@@ -11,6 +11,7 @@ Inbox.lua
 Theme.lua
 AzerMind.lua
 TalentContext.lua
+ActionBarContext.lua
 Links.lua
 Settings.lua
 Quests.lua

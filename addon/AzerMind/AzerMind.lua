@@ -95,6 +95,8 @@ function AzerMind.MessageText(role, text)
 	if role == "user" then
 		local start = text:find("\n\n--- Linked from the game ---", 1, true)
 		if start then text = text:sub(1, start - 1) end
+		start = text:find("\n\n--- Current action bars and keybinds (question-scoped snapshot) ---", 1, true)
+		if start then text = text:sub(1, start - 1) end
 	elseif role == "assistant" then
 		local start = text:find("\n%s*TL;DR:%s*\n")
 		if start and text:sub(1, start - 1):find("%S") then text = text:sub(1, start - 1) end
@@ -1210,7 +1212,7 @@ AzerMind.ContextCategories = {
 	{"identity", "Realm and guild (with character)"}, {"zone", "Zone and subzone"},
 	{"position", "Map and exact coordinates"}, {"progress", "Money and XP"},
 	{"talents", "Talent points and ranks"}, {"professions", "Professions and levels"},
-	{"skills", "Other skills and levels"}, {"spells", "Learned spells and ranks"},
+	{"skills", "Other skills and levels"}, {"spells", "Spells, action bars and hotkeys"},
 	{"quests", "Active and completed quest IDs"}, {"equipment", "Equipment and GearQuest hunts"},
 }
 function AzerMind.ContextOptions(mode)
@@ -1526,6 +1528,7 @@ function AzerMind.Send(text, allow)
 	-- Shift-clicked links become [Name] plus their tooltip, which is what the agent can read.
 	-- Resolve the player's destination before expanded links introduce other names.
 	local gearContext = Try(AzerMind.GearQuestionContext, text)
+	local actionBarContext = Try(AzerMind.ActionBarQuestionContext, text)
 	local links
 	text, links = AzerMind.ExpandLinks(text)
 	local limit = 48000
@@ -1533,6 +1536,13 @@ function AzerMind.Send(text, allow)
 		if #text + #gearContext <= limit then text = text .. gearContext
 		else
 			local omitted = "\n[Addon gear observations omitted: message size limit.]"
+			if #text + #omitted <= limit then text = text .. omitted end
+		end
+	end
+	if type(actionBarContext) == "string" and actionBarContext ~= "" then
+		if #text + #actionBarContext <= limit then text = text .. actionBarContext
+		else
+			local omitted = "\n[Action bar observations omitted: message size limit.]"
 			if #text + #omitted <= limit then text = text .. omitted end
 		end
 	end
