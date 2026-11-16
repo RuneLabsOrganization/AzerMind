@@ -168,3 +168,9 @@ Não declarar aprovação visual sem evidência real do cliente. Implementação
   preservados. Testes novos registrados no npm test e na conferência de UI.
 - Instalação com backup verificada: 170 arquivos, zero ausentes/desatualizados.
   Backup inicial: backups/grimoire/2026-11-16T18-40-14-099Z-3ce1fbd5.
+
+- Entrega integrada: origin/main recebeu seis commits de contexto de inventário
+  durante o trabalho. Merge sem conflitos em 6b76cc7, preservando integralmente
+  AzerMind.lua, Items.lua e Settings.lua recebidos do remoto. A suíte completa
+  da combinação final passou com 341 testes, zero falhas, mais Lua e codec.
+  Evidência local: tests/dungeons-integrated-results.tmp (arquivo ignorado).
