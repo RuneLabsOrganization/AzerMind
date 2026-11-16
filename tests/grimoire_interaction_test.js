@@ -15,6 +15,16 @@ test('inventory attachments become inspectable cards while saved context and cop
   vm.run('AzerMindDB.chats[1].history={{role="assistant",text="Normal response"}}; AzerMind.Render()');
   assert.equal(vm.value('B.attachment:IsShown()'),'false');
 });
+test('compact item attachments and legacy snapshots share one presentation without losing context',t=>{
+  const vm=boot(t);
+  const text='[Items]\nEquipped: [Ring] ×1\n[/Items]\n\n--- Selected inventory items ---\nBank: [Shard] ×4 (bank snapshot: yesterday)\n--- End selected inventory items ---\n\nHelp me';
+  vm.run(`COMPACT=${JSON.stringify(text)}; V,CARD=AzerMind.PresentMessage('user',COMPACT)`);
+  assert.equal(vm.value('V'),'Help me');
+  assert.equal(vm.num('CARD.count'),2);
+  assert.match(vm.value('CARD.full'),/bank snapshot: yesterday/);
+  assert.equal(vm.value("AzerMind.PresentMessage('assistant',COMPACT)"),text);
+  assert.equal(vm.value("AzerMind.PresentMessage('user','[Items]\\nEquipped: [Ring] ×1')"),'[Items]\nEquipped: [Ring] ×1');
+});
 test('incomplete snapshots and assistant-quoted markers are not silently hidden',t=>{
   const vm=boot(t);
   for(const role of ['user','assistant']) {

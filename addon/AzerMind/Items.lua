@@ -474,7 +474,7 @@ function AzerMind.ShowItemPicker()
             local chosen=SelectionCount()
             if chosen==0 then return end
 			if chosen>100 then p.summary:SetText("Choose up to 100 items per attachment."); return end
-			local lines={"--- Selected inventory items ---", "Inventory snapshot: "..date("%Y-%m-%d %H:%M")..". Only Equipped entries are worn."}
+			local lines={"[Items]"}
 			for _,item in ipairs(p.items) do
 				if p.selected[item.key] then
 					if p.mode=="catalog" then AzerMind.EnrichCatalogItem(item) end
@@ -484,7 +484,7 @@ function AzerMind.ShowItemPicker()
 					if auction then lines[#lines+1]=auction end
 				end
 			end
-			lines[#lines+1]="--- End selected inventory items ---"
+			lines[#lines+1]="[/Items]"
 			local attachment=table.concat(lines,"\n")
 			if #attachment>36000 then p.summary:SetText("This attachment is too large. Choose fewer items."); return end
 			if AzerMind.AppendQuestDraft(attachment,p.chatId) then p:Hide() else p.summary:SetText("Conversation changed. Reopen Items to attach this selection.") end

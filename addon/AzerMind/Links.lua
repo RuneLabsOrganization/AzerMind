@@ -91,6 +91,8 @@ function AzerMind.PresentMessage(role, text)
 	local last="--- End selected inventory items ---"
 	while true do
 		local start=visible:find(first,1,true)
+		local compact=visible:find("[Items]",1,true)
+		if compact and (not start or compact<start) then first="[Items]";last="[/Items]";start=compact end
 		local finish=start and visible:find(last,start+#first,true)
 		if not finish then break end
 		local block=visible:sub(start,finish+#last-1)
@@ -107,6 +109,7 @@ function AzerMind.PresentMessage(role, text)
 		for _,item in ipairs(found) do items[#items+1]=item end
 		blocks[#blocks+1]=block
 		visible=visible:sub(1,start-1)..visible:sub(finish+#last)
+		first="--- Selected inventory items ---";last="--- End selected inventory items ---"
 	end
 	if #items==0 then return text end
 	local item=items[1]
