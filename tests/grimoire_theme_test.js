@@ -62,6 +62,7 @@ test('composer focus highlights its existing border without allocating new textu
   vm.run('FIELD=AzerMindInputScroll.parent; REGIONS=#FIELD.textures; for _,fn in ipairs(AzerMindInput.hooks.OnEditFocusGained) do fn(AzerMindInput) end');
   assert.equal(vm.value('FIELD.grimoireFocused'),'true');
   assert.equal(vm.num('FIELD.grimoireFrame.parts[1].vertexColor[1]'),1);
+  assert.equal(vm.num('FIELD.grimoireFrame.parts[1].vertexColor[2]'),0.74);
   vm.run('for _,fn in ipairs(AzerMindInput.hooks.OnEditFocusLost) do fn(AzerMindInput) end');
   assert.equal(vm.value('FIELD.grimoireFocused'),'false');
   assert.equal(vm.num('FIELD.grimoireFrame.parts[1].vertexColor[1]'),0.95);
@@ -79,6 +80,15 @@ test('illustrated skins use per-axis slices and larger live typography',t=>{
   assert.equal(vm.num('AzerMindInput.font.size'),16);
   vm.run(`NEW=AzerMindConversationScroll.parent.children[1]; for _,f in ipairs(STUB.frames) do if f.text=="+ New chat" then NEW=f end end`);
   assert.equal(vm.value('NEW.grimoireFrame.name'),'button-paper');
+});
+test('composer shows a native caret and clear focus prompt without covering the empty input',t=>{
+  const vm=boot(t);
+  vm.run('FIELD=AzerMindInputScroll.parent; AzerMindInput:SetText(""); AzerMindInput:SetFocus(); for _,fn in ipairs(AzerMindInput.hooks.OnEditFocusGained) do fn(AzerMindInput) end');
+  assert.equal(vm.value('FIELD.placeholder:IsShown()'),'false');
+  assert.match(vm.value('FIELD.hint:GetText()'),/Typing/);
+  vm.run('AzerMindInput:ClearFocus(); for _,fn in ipairs(AzerMindInput.hooks.OnEditFocusLost) do fn(AzerMindInput) end');
+  assert.equal(vm.value('FIELD.placeholder:IsShown()'),'true');
+  assert.doesNotMatch(vm.value('FIELD.hint:GetText()'),/Typing/);
 });
 test('composer placeholder follows draft content while its keyboard hint remains visible',t=>{
   const vm=boot(t);
