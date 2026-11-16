@@ -1,6 +1,6 @@
 # Dungeons & Raids: plano de renovação da interface
 
-Status: implementação autorizada; etapas 1–5 verificadas automaticamente; integração em andamento.
+Status: implementação e validação automática concluídas; revisão visual real pendente.
 
 ## Objetivo e limites
 
@@ -55,24 +55,24 @@ poluir cada linha. Créditos obrigatórios continuam disponíveis.
 
 ### 1. Estrutura visual da lista
 
-- [ ] Aplicar moldura, fundo, margens, tipografia e botões do novo padrão.
-- [ ] Reservar regiões de navegação, busca, lista, paginação e rodapé.
-- [ ] Uma única ação de fechar; adaptar escala sem ocultar o rodapé.
-- [ ] Manter nomes longos fora da área de Details e checkbox.
+- [x] Aplicar moldura, fundo, margens, tipografia e botões do novo padrão.
+- [x] Reservar regiões de navegação, busca, lista, paginação e rodapé.
+- [x] Uma única ação de fechar; adaptar escala sem ocultar o rodapé.
+- [x] Manter nomes longos fora da área de Details e checkbox.
 
 Verificação: limites e sobreposições em 900x600, 1280x720 e 1920x1080;
 nomes/localizações longos; inspeção no WoW de bordas, fontes e camadas.
 
 ### 2. Busca e filtros
 
-- [ ] Todos/Dungeons/Raids com contagens e seleção evidente.
-- [ ] Localização em seletor; Perto do meu nível com explicação da margem.
-- [ ] Busca por palavras em instância, boss, localização e loot registrado;
+- [x] Todos/Dungeons/Raids com contagens e seleção evidente.
+- [x] Localização em seletor; Perto do meu nível com explicação da margem.
+- [x] Busca por palavras em instância, boss, localização e loot registrado;
   identificar por que um resultado foi encontrado quando for boss ou loot.
-- [ ] Mostrar filtros ativos e permitir limpar um ou todos sem apagar seleção.
-- [ ] Estado sem resultados com recuperação; informar nível indisponível sem
+- [x] Mostrar filtros ativos e permitir limpar um ou todos sem apagar seleção.
+- [x] Estado sem resultados com recuperação; informar nível indisponível sem
   apresentar resultados como recomendação personalizada.
-- [ ] Ordenação previsível por nome e nível de referência, desconhecidos ao fim.
+- [x] Ordenação previsível por nome e nível de referência, desconhecidos ao fim.
 
 Verificação: filtros combinados, acentos/nomes reais conforme dados existentes,
 busca de boss e item, nível ausente, reset e nenhum resultado. Não baixar dados
@@ -80,25 +80,25 @@ ou depender de GetItemInfo para a busca básica de loot registrado.
 
 ### 3. Resultados e navegação
 
-- [ ] Nome em destaque; tipo, nível e localização em linha secundária curta.
-- [ ] Checkbox e realce de seleção; Details com área independente.
-- [ ] Contagem de resultados separada de intervalo/página e total selecionado.
-- [ ] Tooltip revela texto cortado e instruções úteis.
-- [ ] Abrir detalhes e voltar preserva busca, filtros, página e seleção.
-- [ ] Reutilizar linhas; abrir fonte/NPC não altera seleção acidentalmente.
+- [x] Nome em destaque; tipo, nível e localização em linha secundária curta.
+- [x] Checkbox e realce de seleção; Details com área independente.
+- [x] Contagem de resultados separada de intervalo/página e total selecionado.
+- [x] Tooltip revela texto cortado e instruções úteis.
+- [x] Abrir detalhes e voltar preserva busca, filtros, página e seleção.
+- [x] Reutilizar linhas; abrir fonte/NPC não altera seleção acidentalmente.
 
 Verificação: extremos da paginação, poucos/muitos resultados, estabilidade da
 ordenação, clique esquerdo/direito e percurso de ida/volta para detalhes.
 
 ### 4. Tela de bosses e loot
 
-- [ ] Aplicar a mesma moldura e hierarquia visual da lista.
-- [ ] Lista de bosses com seleção clara; distinguir Trash Drops quando houver.
-- [ ] Loot com ícone, nome e metadados realmente disponíveis; sem exigir cache
+- [x] Aplicar a mesma moldura e hierarquia visual da lista.
+- [x] Lista de bosses com seleção clara; distinguir Trash Drops quando houver.
+- [x] Loot com ícone, nome e metadados realmente disponíveis; sem exigir cache
   carregado nem inventar atributos, taxas de drop ou elegibilidade.
-- [ ] Busca de loot com estado vazio, contagem e paginação legíveis.
-- [ ] Separar Entrada no mapa, NPC, Copiar resumo e Voltar conforme contexto.
-- [ ] Sem coordenadas/ID/loot: explicar o dado ausente e desabilitar só a ação
+- [x] Busca de loot com estado vazio, contagem e paginação legíveis.
+- [x] Separar Entrada no mapa, NPC, Copiar resumo e Voltar conforme contexto.
+- [x] Sem coordenadas/ID/loot: explicar o dado ausente e desabilitar só a ação
   que depende dele. Mostrar fonte e caráter parcial da referência.
 
 Verificação: mais de sete bosses e mais de cinco loots, ausência de bosses,
@@ -107,15 +107,15 @@ Preservar tooltips, menus de item, mapa e retorno; nenhuma ação de /target.
 
 ### 5. Seleção e anexação
 
-- [ ] Agrupar Selecionar página, Selecionar resultados e Limpar seleção.
-- [ ] Revisar selecionados mostra toda a seleção, mesmo fora dos filtros;
+- [x] Agrupar Selecionar página, Selecionar resultados e Limpar seleção.
+- [x] Revisar selecionados mostra toda a seleção, mesmo fora dos filtros;
   ao sair, restaura a navegação anterior.
-- [ ] Informar quantos selecionados estão escondidos pelos filtros.
-- [ ] Continuar anexando links compactos de instância, sem despejar resumo,
+- [x] Informar quantos selecionados estão escondidos pelos filtros.
+- [x] Continuar anexando links compactos de instância, sem despejar resumo,
   bosses e loot automaticamente no compositor.
-- [ ] Preservar vínculo com a conversa original, bloqueio de conversa trocada
+- [x] Preservar vínculo com a conversa original, bloqueio de conversa trocada
   e comportamento de inserir no rascunho sem enviar mensagem.
-- [ ] Conferir limites existentes do rascunho; se necessário, aplicar limite
+- [x] Conferir limites existentes do rascunho; se necessário, aplicar limite
   explícito e atômico, com mensagem clara e sem truncar silenciosamente.
 
 Verificação: seleção em várias páginas/filtros, revisão, reset, conversa
@@ -123,13 +123,13 @@ trocada, seleção indisponível e conteúdo exato anexado; nenhum envio automá
 
 ### 6. Revisão integrada e entrega
 
-- [ ] Executar o percurso lista > busca > detalhes > boss > loot > voltar >
+- [x] Executar o percurso lista > busca > detalhes > boss > loot > voltar >
   revisar selecionados > anexar, incluindo Dungeon e Raid.
-- [ ] Rodar testes específicos após cada etapa e corrigir falhas antes da próxima.
-- [ ] Rodar suíte completa, verificações Lua e diff final ao integrar.
-- [ ] Conferir que o diff não alterou as telas concluídas anteriormente.
-- [ ] Registrar testes no fluxo normal/release e atualizar documentação de uso.
-- [ ] Na implementação autorizada: commits por etapa, instalação com backup,
+- [x] Rodar testes específicos após cada etapa e corrigir falhas antes da próxima.
+- [x] Rodar suíte completa, verificações Lua e diff final ao integrar.
+- [x] Conferir que o diff não alterou as telas concluídas anteriormente.
+- [x] Registrar testes no fluxo normal/release e atualizar documentação de uso.
+- [x] Na implementação autorizada: commits por etapa, instalação com backup,
   conferência dos arquivos e push sem sobrescrever alterações remotas.
 - [ ] Conferir capturas reais no WoW: lista, filtros, nomes longos, detalhes,
   loot vazio e rodapé em tamanho menor. Registrar pendências separadamente.
@@ -157,3 +157,14 @@ Não declarar aprovação visual sem evidência real do cliente. Implementação
   geometria/reuso de linhas, telas suportadas e ausência de metadados/IDs.
 - Revisão visual no cliente: PENDENTE. Não confundir geometria simulada com
   aprovação de texturas, fontes e camadas no WoW.
+
+- Integração: suíte completa com 338 testes, zero falhas, Lua/order e codec
+  aprovados. Após a revisão final de tipografia e o teste adicional de tamanho,
+  as seis regressões específicas foram executadas novamente e passaram.
+- O teste antigo do placeholder foi alinhado ao comportamento de foco já
+  existente em 2eb725b: vazio com foco mostra o cursor; ao perder foco aparece
+  a ajuda. Nenhum código do compositor ou do tema foi alterado.
+- Diff revisado: produto limitado a Instances.lua; dados e telas anteriores
+  preservados. Testes novos registrados no npm test e na conferência de UI.
+- Instalação com backup verificada: 170 arquivos, zero ausentes/desatualizados.
+  Backup inicial: backups/grimoire/2026-11-16T18-40-14-099Z-3ce1fbd5.

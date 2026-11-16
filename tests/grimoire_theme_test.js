@@ -96,6 +96,8 @@ test('composer placeholder follows draft content while its keyboard hint remains
   assert.equal(vm.value('FIELD.placeholder:IsShown()'),'false');
   assert.equal(vm.value('FIELD.hint:IsShown()'),'true');
   vm.run('AzerMindInput:SetText(""); for _,fn in ipairs(AzerMindInput.hooks.OnTextChanged) do fn(AzerMindInput) end');
+  assert.equal(vm.value('FIELD.placeholder:IsShown()'),'false','focused empty input keeps the native caret visible');
+  vm.run('AzerMindInput:ClearFocus(); for _,fn in ipairs(AzerMindInput.hooks.OnEditFocusLost) do fn(AzerMindInput) end');
   assert.equal(vm.value('FIELD.placeholder:IsShown()'),'true');
 });
 test('composer action artwork follows connect, send and stop states',t=>{

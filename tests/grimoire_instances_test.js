@@ -78,3 +78,9 @@ test('instance windows fit supported screens and missing data keeps unrelated ac
   P.search:SetText('no matching dungeon');P.Refresh();assert(P.empty:IsShown())
  `);
 });
+test('oversized instance references are rejected atomically without replacing the draft',t=>{
+ const vm=boot(t);fixture(vm);
+ vm.run(`AzerMindInput:SetText('Keep this question');P.selected[1]=true;AzerMindInstanceData[1].name=string.rep('x',36001);P.attach.scripts.OnClick()`);
+ assert.equal(vm.value('AzerMindInput:GetText()'),'Keep this question');
+ assert.match(vm.value('P.count:GetText()'),/too large/);
+});

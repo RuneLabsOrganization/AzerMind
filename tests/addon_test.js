@@ -1713,9 +1713,9 @@ test('dungeon location dropdown uses the selected option key and can reset and c
  assert.equal(vm.evaluate('AzerMindInstancePicker.zone'),'All');
  assert.equal(vm.evaluate('AzerMindInstancePicker.locationButton:GetText()'),'Location: All locations');
  assert.equal(vm.num('#AzerMindInstancePicker.visible'),38);
- vm.run('for _,b in ipairs(AzerMindInstancePicker.children) do if b.text=="Raids" then b.scripts.OnClick() end end');
+ vm.run('for _,b in ipairs(AzerMindInstancePicker.children) do if b.text and b.text:match("^Raids %(") then b.scripts.OnClick() end end');
  assert.equal(vm.num('#AzerMindInstancePicker.visible'),3);
- vm.run('for _,b in ipairs(AzerMindInstancePicker.children) do if b.text=="Dungeons" then b.scripts.OnClick() end end');
+ vm.run('for _,b in ipairs(AzerMindInstancePicker.children) do if b.text and b.text:match("^Dungeons %(") then b.scripts.OnClick() end end');
  assert.equal(vm.num('#AzerMindInstancePicker.visible'),35);
 });
 

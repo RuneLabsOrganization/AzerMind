@@ -158,6 +158,10 @@ In **Items**, expand a category with its arrow (for example, **Armor > Cloth**),
 
 **Review selected** includes items hidden by the current filters and returns you to your previous browsing position when closed. Inventory and database selections remain separate. Select up to 100 items; **Add to message** inserts them into the draft without sending it. Bank entries use the last available snapshot, and unavailable items are removed from the selection when inventory refreshes.
 
+In **Dungeons & Raids**, choose All instances, Dungeons or Raids in the sidebar. Search accepts words from instance names, locations, bosses and recorded loot (including item IDs). Location, nearby-level and search filters can be cleared individually through **Active filters**. Nearby-level uses the recorded range with a five-level margin; it does not establish entry eligibility. Sort by name or reference level.
+
+Use **Details** to browse bosses and loot without changing your selection. **Reference info** shows the snapshot source and limitations; **Show entrance** uses recorded coordinates when available. **Review selected** includes selections outside your filters and restores your previous page when closed. Adding instances inserts compact links into the draft without sending a message.
+
 Right-click a quest link to mark an available objective or turn-in on the map. Multiple locations open a chooser. Missing coordinates are not guessed, and manual marks do not automatically track progress.
 
 Focus the input and shift-click supported items, spells, quests or links to attach them. Attachments expand to reference data when sent. Click a reply or `/azermind copy` to copy it. Use `/ai <text>` or the `[reply]` link to answer the agent. `/r` remains the game's normal whisper reply; AzerMind does not intercept native chat command handlers.
