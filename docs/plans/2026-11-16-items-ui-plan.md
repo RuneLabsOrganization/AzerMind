@@ -148,10 +148,10 @@ Visual check: find a known bag item, an armor subtype and a database item.
 
 ### 4. Results and ordering
 
-- [ ] Align item rows and selected feedback; keep tooltips and source browsing.
-- [ ] Separate result/page/selection counters and improve page navigation.
-- [ ] Add stable sorting with unknown values last.
-- [ ] Preserve bounded visible-row reuse for large catalogs.
+- [x] Align item rows and selected feedback; keep tooltips and source browsing.
+- [x] Separate result/page/selection counters and improve page navigation.
+- [x] Add stable sorting with unknown values last.
+- [x] Preserve bounded visible-row reuse for large catalogs.
 
 Automated checks: at least 2,000 items, paging/scrolling endpoints, stable sort,
 long names, quantities and no accidental selection when inspecting a source.
@@ -198,3 +198,5 @@ Iteration 1: category-tree regression and four existing inventory/catalog regres
 Iteration 2: framed 920x660 layout, location selector, reserved category/result gutters and fixed selection footer passed geometry tests at three screen sizes, five item/auction tests and three existing picker compatibility checks. Client visual review remains pending.
 
 Iteration 3: four focused item regressions and three compatibility checks passed. Added word/ID/link search, category recovery, independently clearable filters, contextual empty states and filtered tree counts. Metadata refreshes are coalesced and invalidate the cache; scrolling/collapsing does not rescan items. Client visual review remains pending.
+
+Iteration 4: six item regressions plus four auction regressions passed. Stable Name/Rarity/Level/Location sorting, readable rows, independent matched/page counters and source inspection are checked. The 2,000-item fixture keeps at most six result rows and does not rescan filters on scrolling. Client visual review remains pending.

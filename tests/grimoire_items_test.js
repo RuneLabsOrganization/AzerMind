@@ -94,3 +94,34 @@ test('combined filters expose counts and incomplete metadata, refreshing only on
   assert(P.filterPasses==passes+1,'metadata events were not coalesced')
  `);
 });
+
+test('sorting is stable, keeps unknown values last, and does not mutate source records or selection',t=>{
+ const vm=fixture(t);
+ vm.run(`
+  P.selected['bags:1']=true
+  P.sort='rarity';P.query=nil;P.Refresh()
+  assert(P.visible[1].id==3 and P.visible[2].id==1 and P.visible[3].id==2,'rarity order wrong')
+  assert(P.visible[#P.visible].quality==nil,'unknown rarity sorted before known values')
+  P.sort='level';P.query=nil;P.Refresh()
+  assert(P.visible[1].id==1 and P.visible[2].id==2 and P.visible[3].id==3,'level order wrong')
+  assert(ITEMS[1].id==1 and P.selected['bags:1'],'sorting mutated source or selection')
+  AzerMind.ShowSourceBrowser=function() SOURCE_OPENED=true end
+  local row=P.rows[1];row.checked=false;row.scripts.OnClick(row,'RightButton')
+  assert(SOURCE_OPENED and row:GetChecked() and P.selected['bags:1'],'source inspection toggled selection')
+ `);
+});
+
+test('two thousand items page and scroll through bounded rows without rescanning filters',t=>{
+ const vm=fixture(t);
+ vm.run(`
+  LARGE={};for i=1,2000 do LARGE[i]={key='bags:'..i,id=i,name=string.format('Item %04d',i),link='item:'..i,
+    count=1,location='Bags',kind='',subtype='Cloth',slot='',classID=4,subclassID=1} end
+  AzerMind.OwnedItems=function() return LARGE end;P.Refresh();local passes=P.filterPasses
+  assert(P.resultCount:GetText()=='2000 results','matched count unclear')
+  P.next.scripts.OnClick();assert(P.rows[1].item.id==26,'next page skipped wrong range')
+  P.scroll:SetVerticalScroll(48*10);for _,fn in ipairs(P.scroll.hooks.OnVerticalScroll) do fn() end
+  assert(P.rows[1].item.id==36,'scroll did not reach middle of current page')
+  assert(#P.rows<=6 and P.filterPasses==passes,'scrolling allocated or rescanned all items')
+  assert(P.pageLabel:GetText():find('26-50 / 2000',1,true),'page range incorrect')
+ `);
+});

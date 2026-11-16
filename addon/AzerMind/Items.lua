@@ -125,6 +125,23 @@ local function SearchMatches(item, search)
     for _,word in ipairs(search.words) do if not text:find(word,1,true) then return false end end
     return true
 end
+local function SortItems(items,mode)
+    local locations={Equipped=1,Bags=2,Bank=3,Catalog=4}
+    table.sort(items,function(a,b)
+        local av,bv
+        if mode=="rarity" then av,bv=a.quality,b.quality
+        elseif mode=="level" then av,bv=a.level,b.level
+        elseif mode=="location" then av,bv=locations[a.location],locations[b.location] end
+        if mode~="name" and av~=bv then
+            if av==nil then return false elseif bv==nil then return true end
+            return mode=="rarity" and av>bv or mode~="rarity" and av<bv
+        end
+        local an,bn=(a.name or ""):lower(),(b.name or ""):lower()
+        if an~=bn then return an<bn end
+        if a.id and b.id and a.id~=b.id then return a.id<b.id end
+        return tostring(a.key)<tostring(b.key)
+    end)
+end
 function AzerMind.ShowItemPicker()
 	local chat = AzerMind.SettingsState(); if not chat then return end
 	if not picker then
@@ -149,7 +166,7 @@ function AzerMind.ShowItemPicker()
 		local scroll=CreateFrame("ScrollFrame","AzerMindItemPickerScroll",p,"UIPanelScrollFrameTemplate")
 		-- Reserve the entire selection toolbar below the viewport. Previously
 		-- the viewport extended through it, so rows covered its buttons.
-		scroll:SetPoint("TOPLEFT",p,"TOPLEFT",256,-256); scroll:SetPoint("BOTTOMRIGHT",p,"BOTTOMRIGHT",-54,164); T.Scrollbar(scroll); p.scroll=scroll
+		scroll:SetSize(610,240); scroll:SetPoint("TOPLEFT",p,"TOPLEFT",256,-256); scroll:SetPoint("BOTTOMRIGHT",p,"BOTTOMRIGHT",-54,164); T.Scrollbar(scroll); p.scroll=scroll
 		if scroll.SetClipsChildren then scroll:SetClipsChildren(true) end
 		local content=CreateFrame("Frame",nil,scroll); content:SetSize(610,1); scroll:SetScrollChild(content)
 		p.summary=T.Label(p,"",32,-600); p.summary:SetWidth(530); p.summary:SetJustifyH("LEFT")
@@ -189,7 +206,7 @@ function AzerMind.ShowItemPicker()
                     end
                 end
             end
-            local query=baseQuery..":"..p.category..":"..tostring(p.onlySelected)
+            local query=baseQuery..":"..p.category..":"..tostring(p.onlySelected)..":"..(p.sort or "name")
             if query~=p.query then
                 p.query=query; p.page=1; visible={}; p.matchKeys={}; scroll:SetVerticalScroll(0)
                 for _,item in ipairs(p.baseMatches) do
@@ -198,6 +215,7 @@ function AzerMind.ShowItemPicker()
                         if not p.onlySelected or p.selected[item.key] then visible[#visible+1]=item end
                     end
                 end
+                SortItems(visible,p.sort or "name")
             end
 			for key in pairs(p.selected) do total=total+1; if not p.matchKeys[key] then hidden=hidden+1 end end
 			p.visible=visible
@@ -212,10 +230,12 @@ function AzerMind.ShowItemPicker()
 				local row=p.rows[used]
 				if not row then
 					row=CreateFrame("CheckButton",nil,content,"UICheckButtonTemplate"); row:SetSize(24,24)
-					row:SetHitRectInsets(0,-570,0,-20)
-					row.icon=row:CreateTexture(nil,"ARTWORK"); row.icon:SetSize(30,30); row.icon:SetPoint("TOPLEFT",30,-2)
-					row.title=T.Label(row,"",68,-1); row.title:SetWidth(520); row.title:SetJustifyH("LEFT"); row.title:SetWordWrap(false)
-					row.detail=T.Label(row,"",68,-22); row.detail:SetWidth(520); row.detail:SetJustifyH("LEFT"); row.detail:SetWordWrap(false); T.Color(row.detail,"SetTextColor","muted")
+					row:SetHitRectInsets(0,-586,0,-22)
+                    row.selectionFill=row:CreateTexture(nil,"BACKGROUND");row.selectionFill:SetPoint("TOPLEFT",row,"TOPLEFT",-2,3);row.selectionFill:SetSize(610,46)
+                    local selected=T.colors.selected;row.selectionFill:SetColorTexture(selected[1],selected[2],selected[3],0.55)
+					row.icon=row:CreateTexture(nil,"ARTWORK"); row.icon:SetSize(36,36); row.icon:SetPoint("TOPLEFT",30,-2)
+					row.title=T.Label(row,"",76,-1); T.Type(row.title,"mainLabel"); row.title:SetWidth(526); row.title:SetJustifyH("LEFT"); row.title:SetWordWrap(false)
+					row.detail=T.Label(row,"",76,-25); row.detail:SetWidth(526); row.detail:SetJustifyH("LEFT"); row.detail:SetWordWrap(false); T.Color(row.detail,"SetTextColor","muted")
 					row:SetScript("OnClick",function(self) p.selected[self.item.key]=self:GetChecked() or nil; if p.onlySelected then p.query=nil end; Render() end)
 					local function ShowItemTooltip(self)
                         self.auctionExpanded = IsShiftKeyDown and IsShiftKeyDown() or false
@@ -235,21 +255,28 @@ function AzerMind.ShowItemPicker()
                     end)
 					row:RegisterForClicks("LeftButtonUp","RightButtonUp")
                     local select=row:GetScript("OnClick")
-                    row:SetScript("OnClick",function(self,button) if button=="RightButton" then AzerMind.ShowSourceBrowser("item",self.item.id) else select(self) end end)
+                    row:SetScript("OnClick",function(self,button) if button=="RightButton" then self:SetChecked(p.selected[self.item.key] or false); AzerMind.ShowSourceBrowser("item",self.item.id) else select(self) end end)
                     row:SetScript("OnLeave",function(self) self:SetScript("OnUpdate",nil); GameTooltip:Hide() end); p.rows[used]=row
 				end
 				row:ClearAllPoints(); row:SetPoint("TOPLEFT",0,-(i-1)*48)
-				row.item=item; row:SetChecked(p.selected[item.key] or false); row.icon:SetTexture(item.icon or 134400)
+				row.item=item; row:SetChecked(p.selected[item.key] or false); row.selectionFill:SetShown(p.selected[item.key] or false); row.icon:SetTexture(item.icon or 134400)
 				row.title:SetText(item.link..(item.count>1 and (" ×"..item.count) or ""))
 				local slotName=_G[item.slot] or item.slot
-				row.detail:SetText((item.subtype~="" and item.subtype or "Uncached type")..(slotName~="" and (" · "..slotName) or "").." · "..item.location)
+                local detail={item.subtype~="" and item.subtype or "Type unavailable"}
+                if slotName~="" then detail[#detail+1]=slotName end
+                if item.level and item.level>0 then detail[#detail+1]="Req "..item.level end
+                detail[#detail+1]=item.location
+                row.detail:SetText(table.concat(detail," · "))
 				row:Show()
 			end
 			for i=used+1,#p.rows do p.rows[i]:Hide() end
 			content:SetHeight(math.max(1,pageCount*48))
-			p.pageLabel:SetText("Page "..p.page.." / "..pages)
+            scroll:UpdateScrollChildRect()
+            if scroll.ScrollBar then scroll.ScrollBar:SetShown(pageCount*48>scroll:GetHeight()) end
+			p.pageLabel:SetText((#visible>0 and (pageStart+1) or 0).."-"..(pageStart+pageCount).." / "..#visible.." | Page "..p.page.." / "..pages)
+            p.resultCount:SetText(#visible.." results")
 			p.previous:SetEnabled(p.page>1); p.next:SetEnabled(p.page<pages)
-			p.summary:SetText(total.." selected · "..hidden.." hidden by filters · "..#visible.." shown"..(#visible==0 and " · No matching items" or ""))
+			p.summary:SetText(total.." selected · "..hidden.." outside current filters"..(#visible==0 and " · No matching items" or ""))
 			p.insert:SetText("Add to message ("..total..")"); p.insert:SetEnabled(total>0 and total<=100)
 			local cache=Cache(); p.bank:SetText(cache.updated and ("Bank · "..(bankOpen and "Live" or "Last updated "..cache.updated)) or "Open your bank to load its items.")
             if RenderTree then RenderTree() end
@@ -328,7 +355,11 @@ function AzerMind.ShowItemPicker()
         end
         p.minInput=LevelInput("AzerMindItemMinLevel",580,"minLevel")
         p.maxInput=LevelInput("AzerMindItemMaxLevel",656,"maxLevel")
-        p.breadcrumb=T.Label(p,"All items",256,-230); p.breadcrumb:SetWidth(420); p.breadcrumb:SetJustifyH("LEFT")
+        p.breadcrumb=T.Label(p,"All items",256,-230); p.breadcrumb:SetWidth(328); p.breadcrumb:SetJustifyH("LEFT"); p.breadcrumb:SetWordWrap(false)
+        p.resultCount=T.Label(p,"",592,-234);p.resultCount:SetWidth(104);p.resultCount:SetJustifyH("RIGHT")
+        p.sort="name"
+        p.sortSelector=T.Selector(p,"Sort",176,{{key="name",label="Name"},{key="rarity",label="Rarity"},{key="level",label="Required level"},{key="location",label="Location"}},"name",function(option) p.sort=option.key;p.query=nil;Render() end)
+        p.sortSelector:SetPoint("TOPLEFT",712,-222);p.sortSelector:SetValue("name","Name")
 
 		local slots={"All","INVTYPE_HEAD","INVTYPE_NECK","INVTYPE_SHOULDER","INVTYPE_CHEST","INVTYPE_WAIST","INVTYPE_LEGS","INVTYPE_FEET","INVTYPE_WRIST","INVTYPE_HAND","INVTYPE_FINGER","INVTYPE_TRINKET","INVTYPE_CLOAK","INVTYPE_WEAPON","INVTYPE_2HWEAPON","INVTYPE_WEAPONMAINHAND","INVTYPE_WEAPONOFFHAND","INVTYPE_HOLDABLE","INVTYPE_SHIELD","INVTYPE_RANGED","INVTYPE_RANGEDRIGHT"}
         local slotOptions={}
