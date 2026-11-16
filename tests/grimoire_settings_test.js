@@ -103,6 +103,50 @@ test('character Save and Cancel preserve category, consent and persisted values'
  `);
 });
 
+test('inventory context defaults to off and commits only on Save',t=>{
+ const vm=boot(t);
+ vm.run(`
+  assert(AzerMind.InventoryContextMode()=="off")
+  AzerMind.ShowContextSettings()
+  local p=AzerMindContextSettings
+  assert(p.inventorySelector.value=="off")
+  p.inventoryMode="summary";p.dirty=true;p.Refresh()
+  assert(AzerMind.InventoryContextMode()=="off")
+  for _,button in ipairs(p.children) do if button.text=="Cancel" then button.scripts.OnClick() end end
+  assert(p.inventoryMode=="off")
+  p.inventoryMode="full";p.dirty=true
+  for _,button in ipairs(p.children) do if button.text=="Save" then button.scripts.OnClick() end end
+  assert(AzerMind.InventoryContextMode()=="full")
+  p.inventoryMode="summary";p.dirty=true
+  for _,button in ipairs(p.children) do if button.text=="Cancel" then button.scripts.OnClick() end end
+  assert(p.inventoryMode=="full")
+ `);
+});
+test('bag snapshots are stable, bounded, grouped and opt-in',t=>{
+ const vm=boot(t);
+ vm.run(`
+  local link="|cffffffff|Hitem:123:0:0:0|h[Test cloth]|h|r"
+  C_Container={
+   GetContainerNumSlots=function(bag) return bag==0 and 2 or 0 end,
+   GetContainerItemLink=function() return link end,
+   GetContainerItemInfo=function(_,slot) return {stackCount=slot+1} end
+  }
+  C_Item={GetItemInfo=function() return "Test cloth",link,1,10,5,"Armor","Cloth",20,"INVTYPE_HEAD",134400,0,4,1 end}
+  assert(not AzerMind.GameContext():find("Bags (live",1,true),"bags should not share by default")
+  AzerMind.InventoryContextMode("summary")
+  SUMMARY=AzerMind.GameContext()
+  assert(SUMMARY:find("Test cloth x5",1,true))
+  assert(not SUMMARY:find("|Hitem:",1,true),"summary leaked raw item links")
+  assert(SUMMARY==AzerMind.GameContext(),"unchanged inventory generated a changing snapshot")
+  AzerMind.InventoryContextMode("full")
+  FULL=AzerMind.GameContext()
+  assert(FULL:find("item:123",1,true) and FULL:find("required level 5",1,true))
+  C_Container.GetContainerItemInfo=function(_,slot) return {stackCount=slot+2} end
+  assert(AzerMind.GameContext()~=FULL,"stack count changes were not reflected")
+  AzerMind.InventoryContextMode("off")
+  assert(not AzerMind.GameContext():find("Bags (live",1,true))
+ `);
+});
 test('guide list edits and removals remain drafts until Save, and Cancel restores exact variants',t=>{
  const vm=boot(t);
  vm.run(`

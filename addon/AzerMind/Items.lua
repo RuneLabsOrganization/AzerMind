@@ -58,6 +58,49 @@ function AzerMind.OwnedItems()
 	table.sort(result, function(a,b) if a.name == b.name then return a.key < b.key end; return a.name < b.name end)
 	return result
 end
+-- A deterministic, bounded inventory snapshot for the automatic character context.
+-- Only live bags 0-4 are included; equipped items and cached bank contents are excluded.
+-- Stable text lets the existing ContextToSend comparison skip unchanged inventories.
+function AzerMind.BagContext(mode)
+	if mode ~= "summary" and mode ~= "full" then return "" end
+	local api = C_Container or {}
+	if type(api.GetContainerNumSlots) ~= "function" and type(GetContainerNumSlots) ~= "function" then
+		return "Bags: inventory data unavailable from this client."
+	end
+	local items = {}
+	for _, item in ipairs(AzerMind.OwnedItems()) do
+		if item.location == "Bags" then items[#items + 1] = item end
+	end
+	local header = "Bags (live, " .. mode .. "; excludes equipped and bank): " .. #items .. " distinct items"
+	if #items == 0 then return header .. "\nBags are empty." end
+	local limit = mode == "full" and 5500 or 3200
+	local lines, used, count = {header}, #header, 0
+	for _, item in ipairs(items) do
+		local name = item.name and item.name ~= "" and item.name or ("Item #" .. tostring(item.id or "?"))
+		local line = "- " .. name .. " x" .. tostring(item.count or 1)
+		if mode == "full" then
+			local detail = {}
+			if item.id then detail[#detail + 1] = "item ID " .. item.id end
+			if item.kind and item.kind ~= "" then detail[#detail + 1] = item.kind end
+			if item.subtype and item.subtype ~= "" then detail[#detail + 1] = item.subtype end
+			if tonumber(item.level) and tonumber(item.level) > 0 then detail[#detail + 1] = "required level " .. item.level end
+			if item.quality ~= nil then detail[#detail + 1] = "quality " .. item.quality end
+			if item.slot and item.slot ~= "" then detail[#detail + 1] = "slot " .. item.slot end
+			line = line .. " | link " .. item.link
+			if #detail > 0 then line = line .. " | " .. table.concat(detail, ", ") end
+		end
+		-- Reserve space for a clear truncation marker and avoid partial item lines.
+		if used + #line + 110 > limit then break end
+		lines[#lines + 1] = line
+		used = used + #line + 1
+		count = count + 1
+	end
+	if count < #items then
+		lines[#lines + 1] = "[Bags truncated: " .. (#items - count) .. " additional distinct items omitted; attach manually if needed.]"
+	end
+	return table.concat(lines, "\n")
+end
+
 local categoryFamilies = {
     {"all","All items"},{"class:4","Armor",4},{"class:2","Weapons",2},
     {"accessories","Accessories"},{"class:0","Consumables",0},{"class:7","Materials",7},

@@ -328,6 +328,11 @@ function AzerMind.ShowContextSettings()
 				box.caption:SetAlpha(p.enabled and 1 or 0.5)
 			end
 			for _,button in ipairs(p.presets or {}) do button:SetEnabled(p.enabled) end
+			if p.inventorySelector then
+				local labels={off="Off",summary="Summary",full="Full"}
+				p.inventorySelector:SetValue(p.inventoryMode, labels[p.inventoryMode] or "Off")
+				p.inventorySelector:SetEnabled(p.enabled)
+			end
 			if p.save then p.save:SetEnabled(p.dirty) end
 			if p.status and p.dirty then p.status:SetText("Unsaved changes.") end
 		end
@@ -345,18 +350,27 @@ function AzerMind.ShowContextSettings()
 				Refresh()
 			end)
 		end
-		local help = Label(p, "The preview marks missing data and size limits. Previously shared data may still appear in your chat history.", 20, -338)
+		p.inventorySelector=Theme.Selector(p,"Inventory (Bags)",260,{
+			{key="off",label="Off"},{key="summary",label="Summary: names and counts"},{key="full",label="Full: links and details"}
+		},p.inventoryMode or "off",function(option)
+			p.inventoryMode=option.key; p.dirty=true; Refresh()
+		end)
+		p.inventorySelector:SetPoint("TOPLEFT",p,"TOPLEFT",20,-320)
+		Theme.Tooltip(p.inventorySelector,"Automatic bag sharing","Off is the default. Summary sends item names and counts. Full also sends item links and metadata. Equipped items and bank contents are excluded.")
+		local help = Label(p, "Inventory is opt-in. Snapshots update only when contents change. The preview marks missing data and size limits.", 20, -359)
 		help:SetWidth(560); help:SetJustifyH("LEFT")
 		p.status=Label(p,"",24,-404); p.status:SetWidth(572); p.status:SetJustifyH("LEFT")
 		Button(p, "Preview", 110, 20, -414, function()
-			AzerMind.ShowCopy(p.enabled and AzerMind.GameContext(p.options) or "Automatic character context sharing is off.")
+			AzerMind.ShowCopy(p.enabled and AzerMind.GameContext(p.options,p.inventoryMode) or "Automatic character context sharing is off.")
 			AzerMindCopy:SetFrameLevel(p:GetFrameLevel() + 20)
 		end)
 		Button(p, "Cancel", 100, 346, -414, function()
-            p.options,p.enabled=AzerMind.ContextSettings(); p.dirty=false; Refresh(); p.status:SetText("Changes canceled.")
+            p.options,p.enabled=AzerMind.ContextSettings(); p.inventoryMode=AzerMind.InventoryContextMode(); p.dirty=false; Refresh(); p.status:SetText("Changes canceled.")
         end)
 		p.save=Button(p, "Save", 120, 454, -414, function()
-			AzerMind.SaveContextSettings(p.options, p.enabled); p.dirty=false; Refresh(); p.status:SetText("Saved. Applies to future messages.")
+			AzerMind.SaveContextSettings(p.options, p.enabled)
+			AzerMind.InventoryContextMode(p.inventoryMode)
+			p.dirty=false; Refresh(); p.status:SetText("Saved. Applies to future messages.")
 		end)
 		Button(p, "X", 26, 554, -14, function() p:Hide() end)
 		p.Refresh = Refresh
@@ -364,6 +378,7 @@ function AzerMind.ShowContextSettings()
 	local p = contextPanel
 	if p.dirty then ShowSettingsPage(p); return end
 	p.options, p.enabled = AzerMind.ContextSettings()
+	p.inventoryMode = AzerMind.InventoryContextMode()
 	p.Refresh(); ShowSettingsPage(p)
 end
 

@@ -234,6 +234,7 @@ local function InitDB()
 	if s.signal == nil then s.signal = true end
 	if s.contextMode ~= "full" and s.contextMode ~= "custom" then s.contextMode = "basic" end
 	if s.context == nil then s.context = true end -- tell the agent about the character, zone, etc.
+	if s.inventoryContextMode ~= "summary" and s.inventoryContextMode ~= "full" then s.inventoryContextMode = "off" end
 	-- How much of each reply to print in the game chat. "summary" (the agent's
 	-- closing TL;DR lines) replaced "full" as the default; an install that still
 	-- has the old default saved moves over once, any other choice is kept.
@@ -1231,6 +1232,13 @@ end
 function AzerMind.ContextSettings()
 	return AzerMind.ContextOptions(), db.settings.context
 end
+function AzerMind.InventoryContextMode(mode)
+	if mode == "off" or mode == "summary" or mode == "full" then
+		db.settings.inventoryContextMode = mode
+		run.contextSent = nil
+	end
+	return db.settings.inventoryContextMode or "off"
+end
 function AzerMind.ReplySound(value)
     local allowed={[0]=true,[3081]=true,[18019]=true,[3175]=true,[8960]=true,[7355]=true}
     if value~=nil and allowed[value] then db.settings.replySound=value end
@@ -1243,7 +1251,7 @@ function AzerMind.SaveContextSettings(options, enabled)
 	run.contextSent = nil
 	AzerMind.Render()
 end
-function AzerMind.GameContext(mode)
+function AzerMind.GameContext(mode, inventoryOverride)
 	local options = AzerMind.ContextOptions(mode)
 	local full = options.identity
 	local lines = {}
@@ -1363,6 +1371,12 @@ function AzerMind.GameContext(mode)
 	local equipment = AzerMind.EquipmentDraft(""):gsub("Equipment snapshot taken at [^\n]+", "Currently equipped items (not bag items).")
 	table.insert(lines, (AzerMind.ExpandLinks(equipment)))
 	end -- equipment
+	-- This is a separate opt-in: "All available" never silently shares bags.
+	local inventoryMode = inventoryOverride or db.settings.inventoryContextMode or "off"
+	if inventoryMode ~= "off" and type(AzerMind.BagContext) == "function" then
+		local bags = AzerMind.BagContext(inventoryMode)
+		if bags ~= "" then table.insert(lines, bags) end
+	end
 
 	local s = table.concat(lines, "\n"):gsub("[\30\31]", " ")
 	-- Drop complete trailing lines instead of cutting a skill or UTF-8 character.
