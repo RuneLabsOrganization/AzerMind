@@ -65,31 +65,34 @@ function AzerMind.ShowQuestPicker()
 	if not chat then return end
 	if not picker then
 		local p = CreateFrame("Frame", "AzerMindQuestPicker", AzerMindFrame)
-		picker = p; p:SetSize(640, 600); p:SetPoint("CENTER", AzerMindFrame, "CENTER")
+		picker = p; p:SetSize(920, 660); p:SetPoint("CENTER", AzerMindFrame, "CENTER")
 		p:SetFrameStrata("FULLSCREEN_DIALOG"); p:SetFrameLevel(AzerMindFrame:GetFrameLevel() + 110)
 		p:EnableMouse(true); p:SetClampedToScreen(true)
 		if p.SetIgnoreParentAlpha then p:SetIgnoreParentAlpha(true) end
-		T.Surface(p, "window"); T.FitDialog(p)
-		T.Label(p, "Quests", 20, -18, T.fonts.title)
-		T.Label(p, "Select quests to attach. Your tracker will not change.", 20, -46)
+		T.Panel(p,"frame-window",32);T.Material(p,"leather"); T.FitDialog(p)
+		T.Label(p, "Quests", 32, -28, T.fonts.title)
+		T.Label(p, "Select quests to attach. Your tracker will not change.", 32, -64)
 		table.insert(UISpecialFrames,"AzerMindQuestPicker")
 		p.mode="active"
-		local activeTab=T.Button(p,"My quests",120,26,function() p.mode="active"; p.Load() end); activeTab:SetPoint("TOPLEFT",20,-72)
-		local catalogTab=T.Button(p,"Quest database",148,26,function() p.mode="catalog"; p.Load() end); catalogTab:SetPoint("TOPLEFT",148,-72)
-		local search = T.SearchField(p,nil,592,"Search by quest name, area, or ID")
-		search:SetPoint("TOPLEFT",24,-132)
+		local activeTab=T.Button(p,"My quests",188,30,function() p.mode="active"; p.Load() end); activeTab:SetPoint("TOPLEFT",32,-116)
+		local catalogTab=T.Button(p,"Quest database",188,30,function() p.mode="catalog"; p.Load() end); catalogTab:SetPoint("TOPLEFT",32,-158)
+		local search = T.SearchField(p,nil,632,"Search by quest name, area, or ID")
+		search:SetPoint("TOPLEFT",256,-114);p.search=search
 		T.Type(search, "body"); search:SetMaxLetters(120)
 		search:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 		local scroll = CreateFrame("ScrollFrame", "AzerMindQuestPickerScroll", p, "UIPanelScrollFrameTemplate")
-		scroll:SetPoint("TOPLEFT", 20, -276); scroll:SetPoint("BOTTOMRIGHT", -40, 105)
+		scroll:SetSize(610,226);T.Scrollbar(scroll)
+		scroll:SetPoint("TOPLEFT", 256, -270); scroll:SetPoint("BOTTOMRIGHT", -54, 164)
 		if scroll.SetClipsChildren then scroll:SetClipsChildren(true) end
-		local content = CreateFrame("Frame", nil, scroll); content:SetSize(578, 1); scroll:SetScrollChild(content)
+		local content = CreateFrame("Frame", nil, scroll); content:SetSize(610, 1); scroll:SetScrollChild(content)
 		p.rows, p.selected = {}, {}
-		p.summary = T.Label(p, "", 20, -537)
-		p.version = T.Label(p, "", 20, -566); p.version:SetWidth(350); p.version:SetJustifyH("LEFT")
-		p.page=1; p.pageLabel=T.Label(p,"",128,-508)
+		p.summary = T.Label(p, "", 32, -610);p.summary:SetWidth(530);p.summary:SetWordWrap(false)
+		p.version = T.Label(p, "", 32, -588); p.version:SetWidth(530); p.version:SetJustifyH("LEFT")
+		p.page=1; p.pageLabel=T.Label(p,"",382,-516);p.pageLabel:SetWidth(380);p.pageLabel:SetJustifyH("CENTER")
 		p.city="all"; p.zoneFilter="all"
 		p.status="All"; p.myLevel=false; p.onlySelected=false
+        T.Label(p,"Character filters",32,-204)
+        p.resultCount=T.Label(p,"",256,-242)
 		local function Render()
 			if p.rendering then return end; p.rendering=true
 			local filter = (search:GetText() or ""):lower()
@@ -149,7 +152,9 @@ function AzerMind.ShowQuestPicker()
 			end
 			for i = used+1, #p.rows do p.rows[i]:Hide() end
 			content:SetHeight(math.max(1, pageCount*44))
-			p.pageLabel:SetText("Page "..p.page.." / "..pages)
+			if scroll.ScrollBar then scroll.ScrollBar:SetShown(pageCount*44>scroll:GetHeight()) end
+			p.pageLabel:SetText((#visible==0 and "0" or (pageStart+1).."-"..(pageStart+pageCount)).." / "..#visible.."  |  Page "..p.page.." / "..pages)
+            p.resultCount:SetText((p.mode=="catalog" and "Quest database" or "My quests").." · "..#visible.." results")
 			p.previous:SetEnabled(p.page>1); p.next:SetEnabled(p.page<pages)
 			local matching={}; for _,q in ipairs(visible) do matching[q.id]=true end
 			local hidden=0; for id in pairs(p.selected) do if not matching[id] then hidden=hidden+1 end end
@@ -161,10 +166,10 @@ function AzerMind.ShowQuestPicker()
 		end
 		scroll:HookScript("OnVerticalScroll",function() if p.insert then Render() end end)
 		local function Button(text, width, x, y, action)
-			local b = T.Button(p, text, width, 26, action); b:SetPoint("TOPLEFT", x, y); return b
+			local b = T.Button(p, text, width, 26, action); b:SetPoint("TOPLEFT", x, y);b.caption:SetWidth(width-16);b.caption:SetWordWrap(false); return b
 		end
-		p.previous=Button("Previous",90,20,-502,function() p.page=math.max(1,p.page-1); scroll:SetVerticalScroll(0); Render() end)
-		p.next=Button("Next",90,284,-502,function() p.page=p.page+1; scroll:SetVerticalScroll(0); Render() end)
+		p.previous=Button("Previous",110,256,-508,function() p.page=math.max(1,p.page-1); scroll:SetVerticalScroll(0); Render() end)
+		p.next=Button("Next",110,778,-508,function() p.page=p.page+1; scroll:SetVerticalScroll(0); Render() end)
 		local cityButton,zoneButton
 		local function LocationLabels()
 			p.cityOptions,p.zoneOptions=AzerMind.QuestLocationOptions(p.quests or {},p.city)
@@ -176,7 +181,7 @@ function AzerMind.ShowQuestPicker()
 			cityButton:SetText("City: "..Label(p.cityOptions,p.city,"All cities"))
 			zoneButton:SetText("Zone: "..Label(p.zoneOptions,p.zoneFilter,"All zones"))
 		end
-		cityButton=Button("City: All cities",284,20,-166,function(self)
+		cityButton=Button("City: All cities",300,256,-158,function(self)
 			local db,err=AzerMind.LoadCatalog()
 			AzerMind.AssignQuestGeography(p.quests); p.query=nil; LocationLabels(); Render()
 			if not db then p.summary:SetText(err); return end
@@ -184,7 +189,7 @@ function AzerMind.ShowQuestPicker()
 				p.city=option.key; p.zoneFilter="all"; LocationLabels(); Render()
 			end)
 		end)
-		zoneButton=Button("Zone: All zones",308,312,-166,function(self)
+		zoneButton=Button("Zone: All zones",320,568,-158,function(self)
 			LocationLabels()
 			AzerMind.ShowQuestLocationMenu(self,p.zoneOptions,p.zoneFilter,function(option) p.zoneFilter=option.key; LocationLabels(); Render() end)
 		end)
@@ -200,32 +205,32 @@ function AzerMind.ShowQuestPicker()
         local _,_,myClass=Read(UnitClass,"player"); local _,_,myRace=Read(UnitRace,"player")
         if myClass then table.insert(classes,2,{key=myClass,label="My class"}) end
         if myRace then table.insert(races,2,{key=myRace,label="My race"}) end
-        p.classSelector=T.Selector(p,"Class",146,classes,0,function(o) p.classFilter=o.key; Render() end)
-        p.classSelector:SetPoint("TOPLEFT",308,-72)
-        p.raceSelector=T.Selector(p,"Race",158,races,0,function(o) p.raceFilter=o.key; Render() end)
-        p.raceSelector:SetPoint("TOPLEFT",462,-72)
+        p.classSelector=T.Selector(p,"Class",188,classes,0,function(o) p.classFilter=o.key; Render() end)
+        p.classSelector:SetPoint("TOPLEFT",32,-226)
+        p.raceSelector=T.Selector(p,"Race",188,races,0,function(o) p.raceFilter=o.key; Render() end)
+        p.raceSelector:SetPoint("TOPLEFT",32,-270)
         p.classSelector:SetValue(0,"All"); p.raceSelector:SetValue(0,"All")
-		Button("Select all results", 138, 20, -206, function() for _, q in ipairs(p.visible or {}) do p.selected[q.id]=true end; Render() end)
-		Button("Clear selection", 124, 166, -206, function() p.selected={}; p.query=nil; Render() end)
+		Button("Select all results", 144, 386, -552, function() for _, q in ipairs(p.visible or {}) do p.selected[q.id]=true end; Render() end)
+		Button("Clear selection", 140, 542, -552, function() p.selected={}; p.query=nil; Render() end)
         local playerLevel=UnitLevel("player") or 1
         p.levelToggle=T.Toggle(p,"Quest levels "..math.max(1,playerLevel-5).."-"..(playerLevel+5),220,false,function(value) p.myLevel=value; Render() end)
-        p.levelToggle:SetPoint("TOPLEFT",20,-242)
+        p.levelToggle:SetPoint("TOPLEFT",500,-204)
         p.selectedToggle=T.Toggle(p,"Show selected only",210,false,function(value) p.onlySelected=value; p.query=nil; Render() end)
-        p.selectedToggle:SetPoint("TOPLEFT",244,-242)
-		Button("Reset filters",138,482,-242,function()
+        p.selectedToggle:SetPoint("TOPLEFT",32,-552)
+		Button("Reset filters",132,756,-202,function()
 			p.status="All"; p.myLevel=false; p.myCharacter=false; p.onlySelected=false; p.city="all"; p.zoneFilter="all"
 			p.statusSelector:SetValue("All"); p.levelToggle:SetValue(false); p.selectedToggle:SetValue(false)
 			p.classFilter=0; p.raceFilter=0; p.classSelector:SetValue(0,"All"); p.raceSelector:SetValue(0,"All"); search:SetText(""); p.query=nil; LocationLabels(); Render()
 		end)
-        Button("Select page",116,298,-206,function()
+        Button("Select page",118,256,-552,function()
             for i=(p.page-1)*25+1,math.min(p.page*25,#p.visible) do p.selected[p.visible[i].id]=true end
             Render()
         end)
         local states={"All","Active","Ready to turn in","Completed","Availability unknown","Level too low","Race/class restricted"}
         local statusOptions={}; for _,value in ipairs(states) do statusOptions[#statusOptions+1]={key=value,label=value} end
-        p.statusSelector=T.Selector(p,"Status",198,statusOptions,"All",function(option) p.status=option.key; Render() end)
-        p.statusSelector:SetPoint("TOPLEFT",422,-206)
-		p.insert = Button("Add to message (0)", 174, 446, -562, function()
+        p.statusSelector=T.Selector(p,"Status",232,statusOptions,"All",function(option) p.status=option.key; Render() end)
+        p.statusSelector:SetPoint("TOPLEFT",256,-202)
+		p.insert = Button("Add to message (0)", 206, 682, -606, function()
 			local count=0; for _ in pairs(p.selected) do count=count+1 end; if count==0 or count>30 then return end
 			local text
 			if p.mode=="catalog" then
@@ -238,8 +243,8 @@ function AzerMind.ShowQuestPicker()
 		end)
 		T.Primary(p.insert)
 		T.Tooltip(p.insert,"Add quests to message","Maximum 30 quests per attachment. Adds to the draft; your tracker does not change.")
-		Button("Cancel", 94, 344, -562, function() p:Hide() end)
-		Button("X", 24, 596, -14, function() p:Hide() end)
+		Button("Cancel", 100, 570, -606, function() p:Hide() end)
+		Button("X", 28, 858, -26, function() p:Hide() end)
 		search:SetScript("OnTextChanged", function()
 			p.searchVersion=(p.searchVersion or 0)+1; local version=p.searchVersion
 			C_Timer.After(0.15,function() if p.insert and p:IsShown() and p.searchVersion==version then Render() end end)
@@ -259,7 +264,7 @@ function AzerMind.ShowQuestPicker()
 		p:SetScript("OnEvent", function()
 			if p:IsShown() then p.query=nil; if p.mode=="active" then p.quests=AzerMind.ActiveQuests(); p.removedSelections=T.ReconcileSelection(p.selected,p.quests,"id"); AzerMind.AssignQuestGeography(p.quests); LocationLabels() end; Render() end
 		end)
-		p:SetScript("OnHide",function() T.CloseChoiceMenu() end)
+		p:SetScript("OnHide",function() T.CloseChoiceMenu();search:ClearFocus();GameTooltip:Hide() end)
 	end
 	if picker.chatId~=chat.id then picker.selections={}; picker.selectionSource=nil; picker.selected={} end
     picker.chatId = chat.id; picker.Load(); picker:Show()
