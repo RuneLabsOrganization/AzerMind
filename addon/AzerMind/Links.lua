@@ -200,11 +200,11 @@ function AzerMind.ShowEntityMenu(kind, id, payload, text)
 	local T = AzerMindTheme
 	if not entityMenu then
 		entityMenu = CreateFrame("Frame", "AzerMindEntityMenu", UIParent)
-		entityMenu:SetWidth(246); entityMenu:SetFrameStrata("TOOLTIP"); entityMenu:SetFrameLevel(200)
+		entityMenu:SetWidth(262); entityMenu:SetFrameStrata("TOOLTIP"); entityMenu:SetFrameLevel(200)
 		entityMenu:SetClampedToScreen(true); entityMenu:EnableMouse(true)
-		T.Surface(entityMenu, "window")
-		entityMenu.title = T.Label(entityMenu, "", 12, -12, T.fonts.heading)
-		entityMenu.title:SetWidth(222); entityMenu.title:SetWordWrap(false); entityMenu.title:SetJustifyH("LEFT")
+		T.Panel(entityMenu,"frame-popup",16);T.Material(entityMenu,"leather")
+		entityMenu.title = T.Label(entityMenu, "", 16, -18, T.fonts.heading)
+		entityMenu.title:SetWidth(230); entityMenu.title:SetWordWrap(false); entityMenu.title:SetJustifyH("LEFT")
 		entityMenu.rows = {}
 		table.insert(UISpecialFrames, "AzerMindEntityMenu")
 		entityMenu:RegisterEvent("GLOBAL_MOUSE_DOWN")
@@ -256,14 +256,14 @@ function AzerMind.ShowEntityMenu(kind, id, payload, text)
 		local row = menu.rows[i]
 		if not row then
 			row = T.Button(menu, "", 230, 25, function() end, "LEFT")
-			row:SetPoint("TOPLEFT", menu, "TOPLEFT", 8, -36 - (i-1)*28)
+			row:SetPoint("TOPLEFT", menu, "TOPLEFT", 16, -44 - (i-1)*28)
 			menu.rows[i] = row
 		end
 		local callback = action[2]
 		row:SetText(action[1]); row:SetScript("OnClick", function() menu:Hide(); callback() end); row:Show()
 	end
 	for i = #actions+1, #menu.rows do menu.rows[i]:Hide() end
-	menu:SetHeight(44 + #actions*28)
+	menu:SetHeight(60 + #actions*28)
 	local x, y = GetCursorPosition()
 	local scale = UIParent:GetEffectiveScale()
 	menu:ClearAllPoints(); menu:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x/scale, y/scale)
