@@ -24,4 +24,21 @@ visible active category; no controls overlapping footer/corners; inherited value
 readable; existing settings persist with unchanged scope and consent. Automated
 tests do not replace review of actual WoW screenshots.
 
-Progress: plan recorded; implementation pending.
+Progress: steps 1-5 implemented and checked sequentially. All seven public page
+entry points use one shell; modal close/navigation guards preserve unsaved state
+and pending saves. Inheritance stays readable with explicit customization. Page
+headers, action footers, guide frame/scrollbar and appearance spacing are aligned.
+
+Validation:
+- The complete suite passed 316 Node tests and all 16 real Windows codec cases.
+- After final state/feedback adjustments, all 161 UI checks passed, along with
+  focused settings/auction tests and Lua 5.1 syntax/declaration-order checks.
+- Screen-fit fixtures cover 900x600, 1280x720 and 1920x1080; opacity inheritance,
+  one close/escape path, draft protection and save/cancel persistence are covered.
+- Installation was snapshotted; all 170 installed files matched the project.
+- Actual WoW visual review remains pending: both computer-use entry points failed
+  to initialize with a kernel-assets path error. No screenshot approval is claimed.
+
+The final changes after validation are documentation and the About revision text.
+A /reload loads the new Settings.lua; player conversations and saved preferences
+are not migrated or reset by this UI change.

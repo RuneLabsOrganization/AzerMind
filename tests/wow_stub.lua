@@ -65,6 +65,13 @@ function Methods.SetChecked(self,value) self.checked=value and true or false end
 function Methods.GetChecked(self) return self.checked or false end
 function Methods.GetName(self) return self.name end
 function Methods.GetParent(self) return self.parent end
+function Methods.SetParent(self,parent)
+    if self.parent and self.parent.children then
+        for i,child in ipairs(self.parent.children) do if child==self then table.remove(self.parent.children,i); break end end
+    end
+    self.parent=parent
+    if parent then table.insert(parent.children,self) end
+end
 function Methods.GetWidth(self) return self.width or 400 end
 function Methods.GetHeight(self) return self.height or 300 end
 function Methods.SetScale(self, value) self.scale = value end
@@ -104,7 +111,10 @@ function Methods.CreateTexture(self, name, layer, template, sublevel)
 	table.insert(self.textures, t)
 	return t
 end
-function Methods.CreateFontString(self, name) return NewObject("FontString", name, self) end
+function Methods.CreateFontString(self, name)
+    local region=NewObject("FontString",name,self); region.height=14; return region
+end
+function Methods.SetWordWrap(self, enabled) self.wordWrap=enabled end
 function Methods.CreateAnimationGroup(self) return NewObject("AnimationGroup", nil, self) end
 function Methods.CreateAnimation(self) return NewObject("Animation", nil, self) end
 function Methods.IsPlaying(self) return self.playing or false end

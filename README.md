@@ -125,7 +125,7 @@ Run `npm link` in the source folder. Then run `azermind` from any working folder
 
 Open `/azermind` and create a conversation. Right-click a conversation for management options; each conversation has its own session and working folder.
 
-Open **Settings > AI Config** and choose **Conversation defaults** or **This conversation**. Conversations can inherit defaults or override agent, model and reasoning. Model preferences are stored per agent. Changing effective provider settings starts a fresh provider session while preserving the transcript.
+Open **Config > AI Config** and choose **All conversations** or **This conversation**. When a conversation uses defaults, its values remain readable; choose **Customize this conversation** to edit them. All settings categories share one framed window and persistent menu. Save and Cancel keep the current category open. Conversations can inherit defaults or override agent, model and reasoning. Model preferences are stored per agent. Changing effective provider settings starts a fresh provider session while preserving the transcript.
 
 Models come from local discovery, configured catalogs and bundled compatibility choices. **Enter model ID...** accepts a custom ID; empty overrides use CLI defaults. Listed models do not guarantee account access. Reasoning options depend on connector support; Grok keeps its CLI reasoning default.
 

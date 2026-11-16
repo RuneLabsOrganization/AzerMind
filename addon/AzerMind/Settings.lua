@@ -1,11 +1,120 @@
 -- General settings shell. AI options are scoped to defaults or one conversation.
 local panel
 local Theme = AzerMindTheme
+local settingsShell
+local settingsPages = {}
+local function SettingsMessage(page, message)
+    page.message = message
+    if page.Refresh and page == panel then page.Refresh()
+    elseif page.status then page.status:SetText(message) end
+end
+local function CanOpenSettings(key)
+    local active = settingsShell and settingsShell.activePage
+    if active and active.settingsKey ~= key and (active.dirty or active.pending) then
+        SettingsMessage(active, active.pending and "Saving settings... wait for confirmation." or "Save or cancel your changes before switching settings.")
+        settingsShell:Show(); settingsShell.dimmer:Show(); active:Show()
+        return false
+    end
+    return true
+end
+local function CloseSettings()
+    if not settingsShell then return end
+    local active = settingsShell.activePage
+    if active and active.pending then SettingsMessage(active,"Saving settings... wait for confirmation."); return end
+    settingsShell:Hide()
+end
+local function EnsureSettingsShell()
+    if settingsShell then return settingsShell end
+    local p = CreateFrame("Frame", "AzerMindSettingsFrame", AzerMindFrame, "BackdropTemplate")
+    settingsShell = p
+    p:SetSize(910,620); p:SetPoint("CENTER",UIParent,"CENTER")
+    p:SetFrameStrata("FULLSCREEN_DIALOG"); p:SetFrameLevel(AzerMindFrame:GetFrameLevel()+100)
+    p:EnableMouse(true); p:SetClampedToScreen(true)
+    Theme.Panel(p,"frame-window",32); Theme.Material(p,"leather"); Theme.FitDialog(p)
+    p.title = Theme.Label(p,"Settings",28,-28,"GameFontNormalLarge")
+    local dimmer = CreateFrame("Frame","AzerMindSettingsDimmer",AzerMindFrame)
+    dimmer:SetAllPoints(UIParent); dimmer:SetFrameStrata("FULLSCREEN_DIALOG")
+    dimmer:SetFrameLevel(p:GetFrameLevel()-10); dimmer:EnableMouse(true); dimmer:EnableMouseWheel(true)
+    if dimmer.SetIgnoreParentAlpha then dimmer:SetIgnoreParentAlpha(true) end
+    local shade=dimmer:CreateTexture(nil,"BACKGROUND"); shade:SetAllPoints(); shade:SetColorTexture(0,0,0,0.62)
+    dimmer:SetScript("OnMouseDown",CloseSettings); dimmer:SetScript("OnMouseWheel",function() end)
+    p.dimmer=dimmer
+    local close=Theme.Button(p,"X",30,30,CloseSettings)
+    close:SetPoint("TOPRIGHT",p,"TOPRIGHT",-26,-24); p.close=close
+    Theme.Tooltip(close,"Close settings","Escape also closes this window. Unsaved changes require confirmation.")
+    local side=CreateFrame("Frame",nil,p,"BackdropTemplate")
+    side:SetSize(188,476); side:SetPoint("TOPLEFT",p,"TOPLEFT",28,-88)
+    Theme.Panel(side,"frame-panel",12); p.navigation=side
+    local categories={
+        {"ai","AI Config",function() AzerMind.CodexPrompt() end},
+        {"guides","Guide references",function() AzerMind.ShowGuideSettings() end},
+        {"character","Character",function() AzerMind.ShowContextSettings() end},
+        {"notifications","Notifications",function() AzerMind.ShowNotificationSettings() end},
+        {"keys","Key bindings",function() AzerMind.ShowKeySettings() end},
+        {"appearance","Appearance",function() AzerMind.ShowAppearanceSettings() end},
+        {"credits","About & credits",function() AzerMind.ShowCreditsSettings() end},
+    }
+    p.navButtons={}
+    for i,category in ipairs(categories) do
+        local key,label,action=category[1],category[2],category[3]
+        local b=Theme.Button(side,label,164,38,function() if CanOpenSettings(key) then action() end end,"LEFT")
+        b:SetPoint("TOPLEFT",side,"TOPLEFT",12,-16-(i-1)*48)
+        b.caption:SetWordWrap(false); p.navButtons[key]=b
+    end
+    local divider=p:CreateTexture(nil,"BORDER"); divider:SetColorTexture(0.48,0.35,0.19,0.65)
+    divider:SetPoint("BOTTOMLEFT",p,"BOTTOMLEFT",238,96); divider:SetPoint("BOTTOMRIGHT",p,"BOTTOMRIGHT",-30,96); divider:SetHeight(1)
+    Theme.ProtectChanges(p,function() return p.activePage and p.activePage.dirty end,function()
+        if p.activePage then p.activePage.dirty=false end
+    end)
+    p:HookScript("OnShow",function() dimmer:Show() end)
+    p:HookScript("OnHide",function()
+        if p:IsShown() then return end
+        if p.activePage and p.activePage.pending and AzerMindFrame:IsShown() then
+            p:Show(); SettingsMessage(p.activePage,"Saving settings... wait for confirmation."); return
+        end
+        local active=p.activePage
+        if active and active.input then active.input:ClearFocus() end
+        if active and active.customModel then active.customModel:ClearFocus() end
+        Theme.CloseChoiceMenu(); dimmer:Hide()
+    end)
+    table.insert(UISpecialFrames,"AzerMindSettingsFrame")
+    p:Hide(); dimmer:Hide()
+    return p
+end
+local function PrepareSettingsPage(page,key)
+    local shell=EnsureSettingsShell()
+    page:SetParent(shell); page:SetSize(640,510); page:ClearAllPoints()
+    page:SetPoint("TOPLEFT",shell,"TOPLEFT",238,-72)
+    page:SetFrameStrata("FULLSCREEN_DIALOG"); page:SetFrameLevel(shell:GetFrameLevel()+5)
+    page:SetAlpha(1); page.settingsKey=key; settingsPages[key]=page
+    page:Hide()
+    page:HookScript("OnHide",function(self)
+        if self:IsShown() or shell.switching or shell.activePage~=self or not shell:IsShown() then return end
+        if self.dirty or self.pending then self:Show(); CloseSettings(); return end
+        shell.activePage=nil
+        if key=="ai" then CloseSettings() else AzerMind.CodexPrompt() end
+    end)
+end
+local function ShowSettingsPage(page)
+    if not CanOpenSettings(page.settingsKey) then return end
+    local shell=EnsureSettingsShell()
+    Theme.CloseChoiceMenu()
+    shell.switching=true
+    for _,other in pairs(settingsPages) do if other~=page then other:Hide() end end
+    shell.activePage=page; shell.switching=false
+    for key,button in pairs(shell.navButtons) do Theme.Selected(button,key==page.settingsKey) end
+    shell:Show(); shell.dimmer:Show(); page:Show()
+end
 local function Label(parent, text, x, y, template)
+	if parent.settingsKey and template=="GameFontNormalLarge" then x,y=24,-12 end
 	return Theme.Label(parent, text, x, y, template)
 end
 local function Button(parent, text, width, x, y, action)
+	if text=="X" or text=="Close" then return end
 	local b = Theme.Button(parent, text, width, 26, action)
+	local footer={Cancel=368,Save=480,["Save changes"]=480,Preview=24,["Copy credits"]=24,["Reset to 100%"]=24}
+	if footer[text] then x,y=footer[text],-466; b:SetHeight(32); b.settingsFooter=true end
+	if text=="Save" or text=="Save changes" then Theme.Primary(b) end
 	b:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
 	return b
 end
@@ -21,61 +130,35 @@ local function Flat(parent, text, width, x, y, action)
 end
 
 function AzerMind.CodexPrompt(id)
+    if not CanOpenSettings("ai") then return end
 	local chat = AzerMind.SettingsState(id)
 	if not chat then return end
 	if not panel then
 		local p = CreateFrame("Frame", "AzerMindGeneralSettings", AzerMindFrame, "BackdropTemplate")
 		panel = p
-		Theme.ProtectChanges(p,function() return p.dirty end,function() p.dirty=false end)
-		p:SetSize(640, 460); p:SetPoint("CENTER", AzerMindFrame, "CENTER")
-		p:SetFrameStrata("FULLSCREEN_DIALOG"); p:SetFrameLevel(AzerMindFrame:GetFrameLevel() + 100)
-		p:SetAlpha(1); if p.SetIgnoreParentAlpha then p:SetIgnoreParentAlpha(true) end
-		p:EnableMouse(true); Solid(p, "window"); Theme.FitDialog(p)
-		Label(p, "Settings", 22, -20, "GameFontNormalLarge")
-        Label(p,"UI revision 2026-11-11.2",180,-22)
-		local side = CreateFrame("Frame", nil, p); side:SetSize(146, 332); side:SetPoint("TOPLEFT", 12, -76)
-		Solid(side, "panel")
-		Theme.Selected(Flat(side, "AI Config", 126, 10, -12, function() end), true)
-		local function Navigate(action)
-			if p.dirty or p.pending then p.message="Save or cancel changes before switching settings."; p.Refresh(); return end
-			p:Hide(); action()
-            local child=AzerMindCreditsSettings and AzerMindCreditsSettings:IsShown() and AzerMindCreditsSettings or AzerMindAppearanceSettings and AzerMindAppearanceSettings:IsShown() and AzerMindAppearanceSettings or AzerMindGuideSettings and AzerMindGuideSettings:IsShown() and AzerMindGuideSettings or AzerMindContextSettings and AzerMindContextSettings:IsShown() and AzerMindContextSettings or AzerMindNotificationSettings and AzerMindNotificationSettings:IsShown() and AzerMindNotificationSettings or AzerMindKeySettings
-            if child then
-                if not child.parentBackHook then
-                    child:HookScript("OnHide",function(self) if self.returnSettings and not self:IsShown() then self.returnSettings=false; panel:Show() end end)
-                    Button(child,"Back",80,20,-child:GetHeight()+40,function() child:Hide() end)
-                    child.parentBackHook=true
-                end
-                child.returnSettings=true
-            end
-		end
-		Flat(side, "Guide references", 126, 10, -48, function() Navigate(AzerMind.ShowGuideSettings) end)
-		Flat(side, "Character", 126, 10, -84, function() Navigate(AzerMind.ShowContextSettings) end)
-        Flat(side,"Notifications",126,10,-120,function() Navigate(AzerMind.ShowNotificationSettings) end)
-        Flat(side,"Key bindings",126,10,-156,function() Navigate(AzerMind.ShowKeySettings) end)
-        Flat(side,"Appearance",126,10,-192,function() Navigate(AzerMind.ShowAppearanceSettings) end)
-        Flat(side,"About & credits",126,10,-228,function() Navigate(AzerMind.ShowCreditsSettings) end)
-		Label(p, "AI Config", 180, -80, "GameFontNormalLarge")
-		Label(p, "Applies to", 180, -105)
+		PrepareSettingsPage(p,"ai")
+		Label(p, "AI Config", 24, -12, "GameFontNormalLarge")
+		Label(p, "Applies to", 24, -48)
 		p.scope = "conversation"
 		local Refresh, Load
 		local function Changed() p.dirty = true; p.message = "Unsaved changes"; Refresh() end
-		local defaultsButton = Flat(p, "Conversation defaults", 210, 180, -128, function()
+		local defaultsButton = Flat(p, "All conversations", 278, 24, -70, function()
 			if p.dirty or p.pending then p.message = "Save or cancel your changes before switching scope."; Refresh(); return end
 			p.scope = "default"; Load()
 		end)
-		local conversationButton = Flat(p, "This conversation", 210, 398, -128, function()
+		local conversationButton = Flat(p, "This conversation", 278, 310, -70, function()
 			if p.dirty or p.pending then p.message = "Save or cancel your changes before switching scope."; Refresh(); return end
 			p.scope = "conversation"; Load()
 		end)
-		p.scopeHelp = Label(p, "", 180, -166); p.scopeHelp:SetWidth(428); p.scopeHelp:SetJustifyH("LEFT")
+		p.scopeHelp = Label(p, "", 24, -110); p.scopeHelp:SetWidth(572); p.scopeHelp:SetJustifyH("LEFT")
 		p.inheritButton = CreateFrame("CheckButton", nil, p, "UICheckButtonTemplate")
-		p.inheritButton:SetSize(24, 24); p.inheritButton:SetPoint("TOPLEFT", 180, -197)
+		p.inheritButton:SetSize(24, 24); p.inheritButton:SetPoint("TOPLEFT", 24, -142)
 		p.inheritButton:SetScript("OnClick", function() if not p.pending then p.inherit = not p.inherit; Changed() end end)
-		p.inheritLabel = Label(p, "Use default settings", 210, -203)
-		p.agentLabel = Label(p, "Agent", 180, -240)
-		p.modelLabel = Label(p, "Model", 180, -284)
-		p.reasonLabel = Label(p, "Reasoning effort", 180, -328)
+		p.inheritLabel = Label(p, "Use default settings", 54, -148)
+        p.customize = Button(p,"Customize this conversation",240,24,-168,function() if not p.pending then p.inherit=false; Changed() end end)
+		p.agentLabel = Label(p, "Agent", 24, -206)
+		p.modelLabel = Label(p, "Model", 24, -276)
+		p.reasonLabel = Label(p, "Reasoning effort", 24, -346)
         local dropdown={Hide=function() Theme.CloseChoiceMenu() end}
         local function Select(button, values, key)
             if p.pending or (p.scope=="conversation" and p.inherit) then return end
@@ -95,12 +178,12 @@ function AzerMind.CodexPrompt(id)
                 Changed()
             end,key=="modelValue" and "Search models" or "Search options")
         end
-		p.agent = Flat(p, "", 428, 180, -256, function()
+		p.agent = Flat(p, "", 572, 24, -228, function()
 			local _, _, _, agents = AzerMind.SettingsState(p.chatId, p.agentValue)
 			local values = {}; for _, agent in ipairs(agents) do table.insert(values, {agent, agent}) end
 			Select(p.agent, values, "agentValue")
 		end)
-		p.model = Flat(p, "", 428, 180, -300, function()
+		p.model = Flat(p, "", 572, 24, -298, function()
 			local _, _, models = AzerMind.SettingsState(p.chatId, p.agentValue)
 			local values = {{"", "Automatic (CLI configuration)"}}
             for _,m in ipairs(models) do table.insert(values,{m.model,(m.name or m.model)..(m.name and m.name~=m.model and (" ["..m.model.."]") or "")}) end
@@ -108,7 +191,7 @@ function AzerMind.CodexPrompt(id)
 			Select(p.model, values, "modelValue")
 		end)
 		p.customModel = CreateFrame("EditBox", nil, p, "InputBoxTemplate")
-		p.customModel:SetSize(420, 28); p.customModel:SetPoint("TOPLEFT", 184, -300)
+		p.customModel:SetSize(564, 32); p.customModel:SetPoint("TOPLEFT", 28, -298)
 		p.customModel:SetAutoFocus(false); p.customModel:SetMaxLetters(200); p.customModel:Hide()
 		p.customModel:SetFrameLevel(p:GetFrameLevel() + 25)
 		p.customModel:SetScript("OnTextChanged", function() if p.customModel:IsShown() then Changed() end end)
@@ -117,22 +200,22 @@ function AzerMind.CodexPrompt(id)
 			self:ClearFocus(); self:Hide(); Changed()
 		end)
 		p.customModel:SetScript("OnEscapePressed", function(self) self:ClearFocus(); self:Hide() end)
-		p.reasoning = Flat(p, "", 428, 180, -344, function()
+		p.reasoning = Flat(p, "", 572, 24, -368, function()
             local efforts=AzerMind.ModelEfforts(p.agentValue,p.modelValue)
 			local descriptions = {none="Disabled",minimal="Minimal",low="Low - faster", medium="Medium - balanced", high="High - deeper analysis", xhigh="Extra high", max="Maximum", ultra="Ultra"}
 			local values = {{"", "Default (CLI configuration)"}}
 			for _, effort in ipairs(efforts) do table.insert(values, {effort, descriptions[effort] or effort}) end
 			Select(p.reasoning, values, "reasoningValue")
 		end)
-		for _, field in ipairs({p.agent, p.model, p.reasoning}) do Theme.SelectorAppearance(field) end
-        p.catalogInfo=Label(p,"",180,-52); p.catalogInfo:SetWidth(294); p.catalogInfo:SetJustifyH("LEFT"); p.catalogInfo:SetWordWrap(false)
-        p.refreshModels=Button(p,"Refresh models",126,482,-44,function()
+		for _, field in ipairs({p.agent, p.model, p.reasoning}) do field:SetHeight(34); Theme.SelectorAppearance(field) end
+        p.catalogInfo=Label(p,"",24,-430); p.catalogInfo:SetWidth(572); p.catalogInfo:SetJustifyH("LEFT"); p.catalogInfo:SetWordWrap(false)
+        p.refreshModels=Button(p,"Refresh",110,486,-266,function()
             local _,message=AzerMind.RefreshModelChoices(); p.message=message; Refresh()
         end)
         Theme.Tooltip(p.refreshModels,"Refresh model choices",function() return p.catalogInfo:GetText()..". Refreshes choices without changing your saved settings." end)
         Theme.Tooltip(p.model,function() return "Model: "..(p.effectiveModel~="" and p.effectiveModel or "Automatic") end)
-        p.reasonHelp=Label(p,"",180,-338); p.reasonHelp:SetWidth(428); p.reasonHelp:SetJustifyH("LEFT")
-		p.status = Label(p, "", 180, -385); p.status:SetWidth(430); p.status:SetJustifyH("LEFT")
+        p.reasonHelp=Label(p,"",24,-368); p.reasonHelp:SetWidth(572); p.reasonHelp:SetJustifyH("LEFT")
+		p.status = Label(p, "", 24, -408); p.status:SetWidth(572); p.status:SetJustifyH("LEFT")
 		p.save = Button(p, "Save changes", 138, 480, -422, function()
 			if p.customModel:IsShown() then
 				p.modelValue = p.customModel:GetText():match("^%s*(.-)%s*$"); p.reasoningValue = ""; p.dirty = true
@@ -143,7 +226,7 @@ function AzerMind.CodexPrompt(id)
 			if ok then p.dirty = false; p.pending = p.scope == "default" end
 			Refresh()
 		end)
-		Button(p, "Cancel", 100, 370, -422, function() if not p.pending then p.dirty=false; dropdown:Hide(); p:Hide() end end)
+		p.cancel=Button(p, "Cancel", 100, 370, -422, function() if not p.pending then p.Load(); p.message="Changes canceled."; p.Refresh() end end)
 		Button(p, "X", 26, 594, -16, function() if not p.pending then p.dirty=false; dropdown:Hide(); p:Hide() end end)
 		Refresh = function()
 			local _, defaults = AzerMind.SettingsState(p.chatId, p.agentValue)
@@ -151,8 +234,11 @@ function AzerMind.CodexPrompt(id)
 			local agent = inherited and defaults.agent or p.agentValue
 			local model = inherited and defaults.model or p.modelValue
 			local reasoning = inherited and defaults.reasoning or p.reasoningValue
-			p.inheritButton:SetShown(p.scope == "conversation")
+			p.inheritButton:SetShown(p.scope == "conversation" and not inherited)
+            p.customize:SetShown(p.scope=="conversation" and inherited)
+            p.customize:SetEnabled(not p.pending)
 			p.inheritLabel:SetShown(p.scope == "conversation")
+            p.inheritLabel:SetText(inherited and "Using defaults" or "Use defaults for this conversation")
 			p.inheritButton:SetEnabled(not p.pending)
 			p.inheritButton:SetChecked(p.inherit)
 			p.scopeHelp:SetText(p.scope == "default" and "All conversations following defaults; used by new chats." or ("This conversation: " .. ((AzerMind.SettingsState(p.chatId, p.agentValue)).name or "current conversation")))
@@ -175,18 +261,22 @@ function AzerMind.CodexPrompt(id)
             if inherited and not known and reasoning~="" then p.reasonHelp:SetText("Inherited reasoning: "..reasoning.." (capabilities not reported).") end
             p.reasonHelp:SetShown(not reasoningSupported)
             local catalogState={stale=" - cached; refresh failed",cached=" - cached",["not-installed"]=" - CLI not found",unavailable=" - no local catalog"}
+            p.catalogInfo:Hide()
             p.catalogInfo:SetText((meta.catalogSource or "Connect to load model choices.")..(catalogState[meta.catalogStatus] or ""))
             p.refreshModels:SetEnabled(not p.pending)
 			p.reasoning:SetShown(reasoningSupported); p.reasonLabel:SetShown(reasoningSupported)
 			p.agent:SetEnabled(not inherited and not p.pending)
 			p.model:SetEnabled(not inherited and not p.pending); p.reasoning:SetEnabled(not inherited and not p.pending)
 			p.save:SetEnabled(p.dirty and not p.pending)
+			p.cancel:SetEnabled(not p.pending)
 			for _, tab in ipairs({defaultsButton, conversationButton}) do
+				tab:SetEnabled(not p.pending)
 				local selected = (tab == defaultsButton) == (p.scope == "default")
 				Theme.Selected(tab, selected)
 			end
-			for _, field in ipairs({p.agent, p.model, p.reasoning}) do field:SetAlpha(inherited and 0.5 or 1) end
-			p.status:SetText(p.message or (inherited and "Using defaults. Uncheck the box above to customize." or "Changes apply to your next message."))
+			for _, field in ipairs({p.agent, p.model, p.reasoning}) do field:SetAlpha(1); Theme.Color(field.caption,"SetTextColor","text")
+                if field.grimoireFrame then for _,piece in ipairs(field.grimoireFrame.parts) do piece:SetVertexColor(1,1,1,1) end end end
+			p.status:SetText(p.message or (inherited and "Using defaults. Choose Customize to change this conversation." or "Changes apply to your next message."))
 		end
 		Load = function()
 			local c, defaults, _, _, pending = AzerMind.SettingsState(p.chatId, p.agentValue)
@@ -203,22 +293,21 @@ function AzerMind.CodexPrompt(id)
 	end
 	if panel.dirty then
 		if panel.chatId~=chat.id then panel.message="Save or cancel changes before switching conversations."; panel.Refresh() end
-		panel:Show(); return
+		ShowSettingsPage(panel); return
 	end
-	panel.chatId = chat.id; panel.Load(); panel:Show()
+	panel.chatId = chat.id; panel.Load(); ShowSettingsPage(panel)
 end
 
 
 local contextPanel
 function AzerMind.ShowContextSettings()
+    if not CanOpenSettings("character") then return end
 	if not contextPanel then
 		local p = CreateFrame("Frame", "AzerMindContextSettings", AzerMindFrame, "BackdropTemplate")
 		contextPanel = p
-		Theme.ProtectChanges(p,function() return p.dirty end,function() p.dirty=false end)
 		p:SetSize(600, 470); p:SetPoint("CENTER", AzerMindFrame, "CENTER")
 		p:SetFrameStrata("FULLSCREEN_DIALOG"); p:SetFrameLevel(AzerMindFrame:GetFrameLevel() + 100)
-		p:EnableMouse(true); p:SetClampedToScreen(true); Solid(p, "window"); Theme.FitDialog(p)
-		table.insert(UISpecialFrames, "AzerMindContextSettings")
+		p:EnableMouse(true); p:SetClampedToScreen(true); PrepareSettingsPage(p,"character")
 		Label(p, "Share character context", 20, -18, "GameFontNormalLarge")
 		Label(p, "Choose what accompanies future messages in all conversations.", 20, -46)
 		local function Check(text, x, y, action)
@@ -237,11 +326,13 @@ function AzerMind.ShowContextSettings()
 				box.caption:SetAlpha(p.enabled and 1 or 0.5)
 			end
 			for _,button in ipairs(p.presets or {}) do button:SetEnabled(p.enabled) end
+			if p.save then p.save:SetEnabled(p.dirty) end
+			if p.status and p.dirty then p.status:SetText("Unsaved changes.") end
 		end
 		p.presets={
-			Button(p, "Basic", 90, 20, -112, function() p.options = AzerMind.ContextOptions("basic"); p.dirty=true; Refresh() end),
-			Button(p, "All available", 112, 118, -112, function() p.options = AzerMind.ContextOptions("full"); p.dirty=true; Refresh() end),
-			Button(p, "Clear selection", 120, 238, -112, function() p.options = {}; p.dirty=true; Refresh() end)
+			Button(p, "Basic", 104, 24, -112, function() p.options = AzerMind.ContextOptions("basic"); p.dirty=true; Refresh() end),
+			Button(p, "All available", 130, 136, -112, function() p.options = AzerMind.ContextOptions("full"); p.dirty=true; Refresh() end),
+			Button(p, "Clear selection", 140, 274, -112, function() p.options = {}; p.dirty=true; Refresh() end)
 		}
 		for i, field in ipairs(AzerMind.ContextCategories) do
 			local key, caption = field[1], field[2]
@@ -249,45 +340,48 @@ function AzerMind.ShowContextSettings()
 			p.checks[key] = Check(caption, 20 + column * 280, -156 - row * 28, function(self)
 				p.options[key] = self:GetChecked() == true
 				p.dirty=true
+				Refresh()
 			end)
 		end
 		local help = Label(p, "The preview marks missing data and size limits. Previously shared data may still appear in your chat history.", 20, -338)
 		help:SetWidth(560); help:SetJustifyH("LEFT")
+		p.status=Label(p,"",24,-404); p.status:SetWidth(572); p.status:SetJustifyH("LEFT")
 		Button(p, "Preview", 110, 20, -414, function()
 			AzerMind.ShowCopy(p.enabled and AzerMind.GameContext(p.options) or "Automatic character context sharing is off.")
 			AzerMindCopy:SetFrameLevel(p:GetFrameLevel() + 20)
 		end)
-		Button(p, "Cancel", 100, 346, -414, function() p.dirty=false; p:Hide() end)
-		Button(p, "Save", 120, 454, -414, function()
-			AzerMind.SaveContextSettings(p.options, p.enabled); p.dirty=false; p:Hide()
+		Button(p, "Cancel", 100, 346, -414, function()
+            p.options,p.enabled=AzerMind.ContextSettings(); p.dirty=false; Refresh(); p.status:SetText("Changes canceled.")
+        end)
+		p.save=Button(p, "Save", 120, 454, -414, function()
+			AzerMind.SaveContextSettings(p.options, p.enabled); p.dirty=false; Refresh(); p.status:SetText("Saved. Applies to future messages.")
 		end)
 		Button(p, "X", 26, 554, -14, function() p:Hide() end)
 		p.Refresh = Refresh
 	end
 	local p = contextPanel
-	if p.dirty then p:Show(); return end
+	if p.dirty then ShowSettingsPage(p); return end
 	p.options, p.enabled = AzerMind.ContextSettings()
-	p.Refresh(); p:Show()
+	p.Refresh(); ShowSettingsPage(p)
 end
 
 -- One URL per line keeps adding and removing references straightforward.
 local guidePanel
 function AzerMind.ShowGuideSettings()
+    if not CanOpenSettings("guides") then return end
 	if not guidePanel then
 		local p = CreateFrame("Frame", "AzerMindGuideSettings", AzerMindFrame, "BackdropTemplate")
 		guidePanel = p
-		Theme.ProtectChanges(p,function() return p.dirty end,function() p.dirty=false end)
 		p:SetSize(600, 430); p:SetPoint("CENTER", AzerMindFrame, "CENTER")
 		p:SetFrameStrata("FULLSCREEN_DIALOG"); p:SetFrameLevel(AzerMindFrame:GetFrameLevel() + 130)
-		p:EnableMouse(true); p:SetClampedToScreen(true); Solid(p, "window"); Theme.FitDialog(p)
-		table.insert(UISpecialFrames, "AzerMindGuideSettings")
+		p:EnableMouse(true); p:SetClampedToScreen(true); PrepareSettingsPage(p,"guides")
 		Label(p, "Guide references", 20, -20, "GameFontNormalLarge")
 		local help = Label(p, "Applies to: All conversations. One guide URL per line (up to 20). Independent of character sharing.", 20, -54)
 		help:SetWidth(552); help:SetJustifyH("LEFT")
 		local scroll = CreateFrame("ScrollFrame", nil, p, "UIPanelScrollFrameTemplate")
 		scroll:SetSize(530, 210); scroll:SetPoint("TOPLEFT", 24, -124)
 		p.count=Label(p,"",24,-96)
-		Solid(scroll, "panel")
+		Theme.Panel(scroll,"frame-input",8); Theme.Scrollbar(scroll)
 		local input = CreateFrame("EditBox", nil, scroll)
 		input:SetMultiLine(true); input:SetAutoFocus(false); input:SetFontObject("ChatFontNormal")
 		input:SetWidth(524); input:SetHeight(230); input:SetMaxLetters(10000)
@@ -304,26 +398,29 @@ function AzerMind.ShowGuideSettings()
 		p:SetScript("OnHide",function() p.input:ClearFocus() end)
 		p.status = Label(p, "Changes apply to future messages. Previously shared links remain in chat history.", 20, -354)
 		p.status:SetWidth(560); p.status:SetJustifyH("LEFT")
-		Button(p, "Cancel", 100, 346, -390, function() p.dirty=false; p.input:ClearFocus(); p:Hide() end)
+		Button(p, "Cancel", 100, 346, -390, function()
+            p.input:SetText(AzerMind.GuideReferences()); p.dirty=false; p.input:ClearFocus(); p.save:Disable(); p.status:SetText("Changes canceled.")
+        end)
 		p.save=Button(p, "Save", 120, 454, -390, function()
 			local ok, message = AzerMind.SaveGuideReferences(p.input:GetText())
 			if ok then p.input:SetText(AzerMind.GuideReferences()); p.dirty=false; p.save:Disable(); p.status:SetText("Saved. Applies to future messages in all conversations.") else p.status:SetText(message) end
 		end)
 		Button(p, "X", 26, 554, -14, function() p.input:ClearFocus(); p:Hide() end)
 	end
-	if guidePanel.dirty then guidePanel:Show(); guidePanel.input:SetFocus(); return end
+	if guidePanel.dirty then ShowSettingsPage(guidePanel); guidePanel.input:SetFocus(); return end
 	guidePanel.input:SetText(AzerMind.GuideReferences())
 	guidePanel.input:GetScript("OnTextChanged")(); guidePanel.dirty=false; guidePanel.save:Disable()
 	guidePanel.status:SetText("Changes apply to future messages. Previously shared links remain in chat history.")
-	guidePanel:Show(); guidePanel.input:SetFocus()
+	ShowSettingsPage(guidePanel); guidePanel.input:SetFocus()
 end
 
 function AzerMind.ShowNotificationSettings()
+    if not CanOpenSettings("notifications") then return end
     local p=AzerMindNotificationSettings
     if not p then
         p=CreateFrame("Frame","AzerMindNotificationSettings",AzerMindFrame,"BackdropTemplate")
         p:SetSize(520,280); p:SetPoint("CENTER"); p:SetFrameStrata("FULLSCREEN_DIALOG"); p:SetFrameLevel(AzerMindFrame:GetFrameLevel()+120)
-        p:EnableMouse(true); Solid(p,"window"); Theme.FitDialog(p); table.insert(UISpecialFrames,"AzerMindNotificationSettings")
+        p:EnableMouse(true);  PrepareSettingsPage(p,"notifications");
         Label(p,"Reply notifications",110,-24,"GameFontNormalLarge")
         Label(p,"Applies to all conversations. Changes are saved immediately.",20,-70)
         local options={{key=0,label="None"},{key=3081,label="Whisper"},{key=18019,label="Battle.net toast"},{key=3175,label="Map ping"},{key=8960,label="Ready check"},{key=7355,label="Tutorial popup"}}
@@ -334,15 +431,16 @@ function AzerMind.ShowNotificationSettings()
         p.options=options
     end
     for _,o in ipairs(p.options) do if o.key==AzerMind.ReplySound() then p.sound:SetValue(o.key,o.label) end end
-    p:Show()
+    ShowSettingsPage(p)
 end
 
 function AzerMind.ShowKeySettings()
+    if not CanOpenSettings("keys") then return end
  local p=AzerMindKeySettings
  if not p then
   p=CreateFrame("Frame","AzerMindKeySettings",AzerMindFrame); p:SetSize(560,340); p:SetPoint("CENTER")
   p:SetFrameStrata("FULLSCREEN_DIALOG"); p:SetFrameLevel(AzerMindFrame:GetFrameLevel()+120); p:EnableMouse(true)
-  Solid(p,"window"); Theme.FitDialog(p); table.insert(UISpecialFrames,"AzerMindKeySettings")
+   PrepareSettingsPage(p,"keys");
   Label(p,"Chat key bindings",110,-24,"GameFontNormalLarge")
   Label(p,"Enter a key combination, for example CTRL-SHIFT-C.",20,-68)
   p.status=Label(p,"",20,-230); p.status:SetWidth(510); p.status:SetJustifyH("LEFT")
@@ -366,23 +464,23 @@ function AzerMind.ShowKeySettings()
   end
   Button(p,"Close",100,436,-286,function() p:Hide() end)
  end
- p:Show()
+ ShowSettingsPage(p)
 end
 
 local appearancePanel
 function AzerMind.ShowAppearanceSettings()
+    if not CanOpenSettings("appearance") then return end
  if not appearancePanel then
   local p=CreateFrame("Frame","AzerMindAppearanceSettings",AzerMindFrame,"BackdropTemplate")
   appearancePanel=p;p:SetSize(500,250);p:SetPoint("CENTER",AzerMindFrame,"CENTER")
   p:SetFrameStrata("FULLSCREEN_DIALOG");p:SetFrameLevel(AzerMindFrame:GetFrameLevel()+100)
-  p:EnableMouse(true);Solid(p,"window");Theme.FitDialog(p)
-  table.insert(UISpecialFrames,"AzerMindAppearanceSettings")
+  p:EnableMouse(true);PrepareSettingsPage(p,"appearance")
   Label(p,"Appearance",24,-24,"GameFontNormalLarge")
   Label(p,"Addon opacity",24,-68)
   Label(p,"Applies to the chat, mini bar and addon windows.",24,-94)
-  p.percent=Label(p,"",408,-68)
+  p.percent=Label(p,"",540,-68)
   p.slider=CreateFrame("Slider","AzerMindOpacitySlider",p,"OptionsSliderTemplate")
-  p.slider:SetPoint("TOPLEFT",p,"TOPLEFT",32,-126);p.slider:SetSize(424,20)
+  p.slider:SetPoint("TOPLEFT",p,"TOPLEFT",32,-126);p.slider:SetSize(548,20)
   p.slider:SetMinMaxValues(35,100);p.slider:SetValueStep(1)
   for _,entry in ipairs({{"Low","35%"},{"High","100%"},{"Text",""}}) do
    local label=_G["AzerMindOpacitySlider"..entry[1]]; if label then label:SetText(entry[2]) end
@@ -397,18 +495,18 @@ function AzerMind.ShowAppearanceSettings()
   Button(p,"Close",80,394,-202,function() p:Hide() end)
  end
  local p=appearancePanel;p.loading=true;p.slider:SetValue(AzerMind.GetOpacity()*100)
- p.percent:SetText(math.floor(AzerMind.GetOpacity()*100+0.5).."%");p.loading=false;p:Show()
+ p.percent:SetText(math.floor(AzerMind.GetOpacity()*100+0.5).."%");p.loading=false;ShowSettingsPage(p)
 end
 
 
 function AzerMind.ShowCreditsSettings()
+    if not CanOpenSettings("credits") then return end
     local p = AzerMindCreditsSettings
     if not p then
         p = CreateFrame("Frame", "AzerMindCreditsSettings", AzerMindFrame, "BackdropTemplate")
         p:SetSize(600, 470); p:SetPoint("CENTER", AzerMindFrame, "CENTER")
         p:SetFrameStrata("FULLSCREEN_DIALOG"); p:SetFrameLevel(AzerMindFrame:GetFrameLevel()+100)
-        p:EnableMouse(true); Solid(p, "window"); Theme.FitDialog(p)
-        table.insert(UISpecialFrames, "AzerMindCreditsSettings")
+        p:EnableMouse(true); PrepareSettingsPage(p,"credits")
         Label(p, "About & credits", 24, -24, "GameFontNormalLarge")
         local intro = Label(p, "AzerMind is made possible by these projects and contributors.", 24, -58)
         intro:SetWidth(548); intro:SetJustifyH("LEFT")
@@ -438,10 +536,10 @@ function AzerMind.ShowCreditsSettings()
         end
         content:SetHeight(y)
         p.creditText = table.concat(text, "\n\n") .. "\n\nFull licenses and source provenance are included with the addon. This is an independent community project."
-        local footnote = Label(p, "Full licenses and source notices are included with the addon.", 24, -406)
+        local footnote = Label(p, "UI revision 2026-11-15. Full licenses and source notices accompany the addon.", 24, -406)
         footnote:SetWidth(548); footnote:SetJustifyH("LEFT")
         Button(p, "Copy credits", 130, 300, -430, function() AzerMind.ShowCopy(p.creditText) end)
         Button(p, "Close", 110, 446, -430, function() p:Hide() end)
     end
-    p:Show()
+    ShowSettingsPage(p)
 end

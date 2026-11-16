@@ -97,11 +97,7 @@ test('credits are reachable from Settings, copyable and return without losing un
   const vm = boot(t);
   vm.run(`
     AzerMind.CodexPrompt()
-    for _,side in ipairs(AzerMindGeneralSettings.children) do
-      for _,button in ipairs(side.children or {}) do
-        if button.text=="About & credits" then CREDITS_BUTTON=button end
-      end
-    end
+    CREDITS_BUTTON=AzerMindSettingsFrame.navButtons.credits
     AzerMindGeneralSettings.dirty=true
     CREDITS_BUTTON.scripts.OnClick(CREDITS_BUTTON)
   `);

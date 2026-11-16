@@ -131,7 +131,7 @@ test('native window policy groups rendering, raises only on interaction and leav
   for _,fn in ipairs(AzerMindFrame.hooks.OnMouseDown or {}) do fn(AzerMindFrame) end
   assert(AzerMindFrame.raiseCount==count+1,'click does not raise the window')
   AzerMind.ShowAppearanceSettings()
-  assert(AzerMindAppearanceSettings.toplevel and AzerMindAppearanceSettings.flattensRenderLayers,'dialog not grouped')
+  assert(AzerMindSettingsFrame.toplevel and AzerMindSettingsFrame.flattensRenderLayers,'settings window not grouped')
   assert(AzerMindAppearanceSettings:GetFrameStrata()=='FULLSCREEN_DIALOG','modal dialog lost its intended layer')
   assert(FOREIGN:GetFrameStrata()=='DIALOG' and FOREIGN:GetFrameLevel()==80,'foreign addon was modified')
  `);

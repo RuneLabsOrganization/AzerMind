@@ -1757,11 +1757,7 @@ test('guide editor takes keyboard focus, refocuses on blank-area clicks and pres
   const url = 'https://mobalytics.gg/wow-forever/classes/mage-leveling-guide?ws-ngf5-26=activeVariantId%2C7';
   vm.run(`
     AzerMind.CodexPrompt()
-    for _,side in ipairs(AzerMindGeneralSettings.children) do
-      for _,button in ipairs(side.children or {}) do
-        if button.text=="Guide references" then button.scripts.OnClick(button) end
-      end
-    end
+    AzerMindSettingsFrame.navButtons.guides.scripts.OnClick()
   `);
   assert.equal(vm.evaluate('AzerMindGuideSettings.input:HasFocus()'), 'true', 'opening the editor directs paste to the guide field');
   vm.run(`
@@ -1910,7 +1906,7 @@ test('rerendering preserves the reading position and unsaved guide settings requ
  assert.equal(vm.evaluate('STUB.popup.which'),'AZERMIND_DISCARD_UI_CHANGES');
  assert.equal(vm.evaluate('AzerMind.GuideReferences()'),'');
  vm.run('StaticPopupDialogs.AZERMIND_DISCARD_UI_CHANGES.OnAccept(nil,STUB.popup.data)');
- assert.equal(vm.evaluate('AzerMindGuideSettings:IsShown()'),'false');
+ assert.equal(vm.evaluate('AzerMindSettingsFrame:IsShown()'),'false');
 });
 
 test('AI model selector handles long catalogs and only offers the selected model reasoning', () => {
@@ -2096,7 +2092,7 @@ test('closing a settings child returns to its parent and reply sounds persist',(
  const vm=newVM(); login(vm);
  vm.run(`
  AzerMind.CodexPrompt();
- for _,side in ipairs(AzerMindGeneralSettings.children) do for _,b in ipairs(side.children or {}) do if b.text=="Guide references" then b.scripts.OnClick(b) end end end
+ AzerMindSettingsFrame.navButtons.guides.scripts.OnClick()
  `);
  assert.equal(vm.evaluate('AzerMindGeneralSettings:IsShown()'),'false');
  vm.run('AzerMindGuideSettings:Hide()');
