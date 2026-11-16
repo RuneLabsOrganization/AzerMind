@@ -1251,7 +1251,7 @@ function AzerMind.SaveContextSettings(options, enabled)
 	run.contextSent = nil
 	AzerMind.Render()
 end
-function AzerMind.GameContext(mode)
+function AzerMind.GameContext(mode, inventoryOverride)
 	local options = AzerMind.ContextOptions(mode)
 	local full = options.identity
 	local lines = {}
@@ -1372,7 +1372,7 @@ function AzerMind.GameContext(mode)
 	table.insert(lines, (AzerMind.ExpandLinks(equipment)))
 	end -- equipment
 	-- This is a separate opt-in: "All available" never silently shares bags.
-	local inventoryMode = db.settings.inventoryContextMode or "off"
+	local inventoryMode = inventoryOverride or db.settings.inventoryContextMode or "off"
 	if inventoryMode ~= "off" and type(AzerMind.BagContext) == "function" then
 		local bags = AzerMind.BagContext(inventoryMode)
 		if bags ~= "" then table.insert(lines, bags) end
