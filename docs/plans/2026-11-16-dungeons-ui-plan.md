@@ -1,6 +1,6 @@
 # Dungeons & Raids: plano de renovação da interface
 
-Status: proposta para revisão; nenhuma mudança de interface implementada.
+Status: implementação autorizada; etapas 1–5 verificadas automaticamente; integração em andamento.
 
 ## Objetivo e limites
 
@@ -138,5 +138,22 @@ trocada, seleção indisponível e conteúdo exato anexado; nenhum envio automá
 
 Cada etapa registra mudança, resultado dos testes e pendências antes de avançar.
 Testes de geometria e comportamento não aprovam texturas, fontes ou camadas.
-Não declarar aprovação visual sem evidência real do cliente. Este documento
-autoriza planejamento; a implementação aguarda a decisão do usuário.
+Não declarar aprovação visual sem evidência real do cliente. Implementação autorizada pelo usuário em 2026-11-16.
+
+
+## Registro de implementação
+
+- Etapa 1: moldura/leather, navegação lateral, rodapé e áreas separadas. Os 13
+  testes de referência/refinamento passaram antes de avançar.
+- Etapas 2–3: palavras, boss/loot, filtros individuais, ordenação e paginação.
+  Os sete testes de compatibilidade de instâncias passaram. A busca por loot
+  amplia resultados de palavras genéricas; teste de faixa de nível agora usa
+  o nome completo Wailing Caverns para identificar a instância sem ambiguidade.
+- Etapa 4: detalhes com moldura correspondente, informações de fonte separadas,
+  controles de mapa/NPC preservados e títulos fora da área das ações.
+- Etapa 5: revisão independente dos filtros, restauração da página, contagem de
+  ocultos, reconciliação de indisponíveis e limite atômico de 36.000 bytes.
+- Cinco novas regressões passaram: busca/filtros, revisão/anexação, ordenação,
+  geometria/reuso de linhas, telas suportadas e ausência de metadados/IDs.
+- Revisão visual no cliente: PENDENTE. Não confundir geometria simulada com
+  aprovação de texturas, fontes e camadas no WoW.

@@ -142,8 +142,8 @@ function AzerMind.ShowInstancePicker()
    end)
    local pages=math.max(1,math.ceil(#p.visible/6)); p.page=math.max(1,math.min(p.page,pages))
    zoneButton:SetText("Location: "..(p.zone=="All" and "All locations" or p.zone))
-   local selected,hidden=0,0;local existing={};for _,r in ipairs(AzerMindInstanceData or {}) do existing[r.id]=true end
-   for id,value in pairs(p.selected) do if not existing[id] then p.selected[id]=nil elseif value then selected=selected+1;if not matched[id] then hidden=hidden+1 end end end
+   local selected,hidden,removed=0,0,0;local existing={};for _,r in ipairs(AzerMindInstanceData or {}) do existing[r.id]=true end
+   for id,value in pairs(p.selected) do if not existing[id] then p.selected[id]=nil;removed=removed+1 elseif value then selected=selected+1;if not matched[id] then hidden=hidden+1 end end end
    selectedOnly:SetValue(p.selectedOnly)
    for kind,button in pairs(tabs) do
     local total=#AzerMind.FilterInstances(p.search:GetText(),kind,p.zone,level)
@@ -151,7 +151,7 @@ function AzerMind.ShowInstancePicker()
    end
    near:SetChecked(p.near)
    p.count:SetText((p.selectedOnly and "Selected instances" or (p.kind=="All" and "All instances" or p.kind)).."  |  "..#p.visible.." results"..(p.near and not level and " · Player level unavailable" or ""))
-   p.selectionCount:SetText(selected.." selected · "..hidden.." hidden by filters")
+   p.selectionCount:SetText(selected.." selected · "..hidden.." hidden by filters"..(removed>0 and (" · "..removed.." unavailable removed") or ""))
    local active=(p.kind~="All" and 1 or 0)+(p.zone~="All" and 1 or 0)+(p.near and 1 or 0)+(p.search:GetText():find("%S") and 1 or 0)
    p.filters:SetText("Active filters ("..active..")")
    p.pageLabel:SetText((#p.visible==0 and "0" or ((p.page-1)*6+1).."-"..math.min(p.page*6,#p.visible)).." / "..#p.visible.."  |  Page "..p.page.." / "..pages)
@@ -244,7 +244,10 @@ do
    p.summary=T.Label(p,"",32,-68); p.summary:SetWidth(780); p.summary:SetJustifyH("LEFT")
    T.Icon(p,"location",32,-94)
    p.location=T.Label(p,"",58,-94); p.location:SetWidth(594); p.location:SetWordWrap(false)
-   p.info=Button(p,"Reference info",144,676,-90,function() AzerMind.ShowCopy("Source: "..(p.record.source or "Bundled snapshot").."\nLevel ranges are references, not entry requirements. This snapshot may be incomplete; confirm current rules and drops.") end)
+   p.info=Button(p,"Reference info",144,676,-90,function()
+    AzerMind.ShowCopy("Source: "..(p.record.source or "Bundled snapshot").."\nLevel ranges are references, not entry requirements. This snapshot may be incomplete; confirm current rules and drops.")
+    AzerMindCopy:SetFrameLevel(p:GetFrameLevel()+20)
+   end)
    T.Tooltip(p.info,"Reference information",function() return "Source: "..(p.record.source or "Bundled snapshot").."\nLevel ranges are references, not entry requirements. Confirm current rules and drops." end)
    Button(p,"X",28,800,-26,function() p:Hide() end)
    local left=CreateFrame("Frame",nil,p); left:SetSize(246,414); left:SetPoint("TOPLEFT",32,-130); T.Panel(left,"frame-input",12);T.Material(left,"leather")

@@ -58,3 +58,23 @@ test('instance layout reserves result, detail-action and footer areas and uses b
   assert(GR_Bounds(D.bossTitle).right<=GR_Bounds(D.npc).left,'boss title overlaps NPC action')
  `);
 });
+test('instance windows fit supported screens and missing data keeps unrelated actions available',t=>{
+ const vm=boot(t);fixture(vm);
+ vm.run(`
+  P.selected[999]=true;P.Refresh();assert(not P.selected[999]);assert(P.selectionCount:GetText():find('unavailable removed',1,true))
+  UnitLevel=function() return nil end;P.near=true;P.Refresh();assert(P.count:GetText():find('Player level unavailable',1,true))
+  AzerMind.ShowInstanceDetails({id=100,name='Missing',type='Raid',level='Unknown',location='Unknown',source='Partial snapshot',bosses={{name='Trash Drops',loot={{name='Unknown drop'}}}}},P)
+  D=AzerMindInstanceDetails
+  assert(not D.map:IsEnabled() and not D.npc:IsEnabled())
+  assert(D.lootRows[1].meta:GetText()=='Item details not recorded')
+  D.lootRows[1].scripts.OnClick(D.lootRows[1],'LeftButton')
+  assert(D.feedback:GetText():find('No item reference',1,true))
+  D.info.scripts.OnClick();assert(AzerMindCopyBox:GetText():find('Partial snapshot',1,true))
+  for _,size in ipairs({{900,600},{1280,720},{1920,1080}}) do
+   UIParent:SetSize(size[1],size[2]);for _,fn in ipairs(UIParent.hooks.OnSizeChanged or {}) do fn(UIParent) end
+   for _,f in ipairs({P,D}) do assert(f:GetWidth()*f:GetScale()<=size[1]-32);assert(f:GetHeight()*f:GetScale()<=size[2]-32) end
+  end
+  D.search:SetText('no matching item');D.search.scripts.OnTextChanged();assert(D.empty:IsShown())
+  P.search:SetText('no matching dungeon');P.Refresh();assert(P.empty:IsShown())
+ `);
+});
