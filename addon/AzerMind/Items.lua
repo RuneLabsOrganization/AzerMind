@@ -113,6 +113,18 @@ local function ItemCategoryTree(items)
     end
     return roots,nodes
 end
+local function ItemSearch(text)
+    text=(text or ""):match("^%s*(.-)%s*$"):lower()
+    local id=text:match("item:(%d+)") or text:match("^(%d+)$")
+    local words={}; if not id then for word in text:gmatch("%S+") do words[#words+1]=word end end
+    return {id=tonumber(id),words=words}
+end
+local function SearchMatches(item, search)
+    if search.id then return item.id==search.id end
+    local text=table.concat({item.name or "",item.kind or "",item.subtype or ""}," "):lower()
+    for _,word in ipairs(search.words) do if not text:find(word,1,true) then return false end end
+    return true
+end
 function AzerMind.ShowItemPicker()
 	local chat = AzerMind.SettingsState(); if not chat then return end
 	if not picker then
@@ -141,31 +153,52 @@ function AzerMind.ShowItemPicker()
 		if scroll.SetClipsChildren then scroll:SetClipsChildren(true) end
 		local content=CreateFrame("Frame",nil,scroll); content:SetSize(610,1); scroll:SetScrollChild(content)
 		p.summary=T.Label(p,"",32,-600); p.summary:SetWidth(530); p.summary:SetJustifyH("LEFT")
-		p.bank=T.Label(p,"",32,-622); p.bank:SetWidth(530); p.bank:SetJustifyH("LEFT")
+		p.bank=T.Label(p,"",32,-622); p.bank:SetWidth(530); p.bank:SetJustifyH("LEFT"); p.bank:SetWordWrap(false)
 		p.page=1
 		p.pageLabel=T.Label(p,"",368,-516); p.pageLabel:SetWidth(414); p.pageLabel:SetJustifyH("CENTER")
 		local categoryButtons, locationButtons={},{}
         p.expanded={}; p.categoryRows={}; p.categoryCounts={}
         local RenderTree
 		local function Render()
-			if p.rendering then return end
+			if p.rendering or p.changingFilters then return end
 			p.rendering=true
 			local visible, total, hidden=p.visible or {},0,0
-			local filter=(search:GetText() or ""):lower()
-			local query=table.concat({p.mode,filter,p.location,p.category,p.rarity,tostring(p.minLevel),tostring(p.maxLevel),tostring(p.subclass),p.slot,tostring(p.onlySelected)},":")
-			if query~=p.query then
-				p.query=query; p.page=1; visible={}; p.matchKeys={}; scroll:SetVerticalScroll(0)
-			for _,item in ipairs(p.items or {}) do
-				if p.slot~="All" then AzerMind.EnrichCatalogItem(item) end
-                local match=(p.location=="All" or item.location==p.location or (p.mode=="catalog" and p.ownership[item.id] and p.ownership[item.id][p.location])) and Category(item,p.category)
-					and (p.rarity==-1 or item.quality==p.rarity)
-                    and (not p.minLevel or (item.level and item.level>=p.minLevel))
-                    and (not p.maxLevel or (item.level and item.level<=p.maxLevel))
-					and (p.slot=="All" or item.slot==p.slot) and (not p.onlySelected or p.selected[item.key])
-					and (item.name.." "..item.kind.." "..item.subtype.." "..(item.id or "")):lower():find(filter,1,true)
-				if match then visible[#visible+1]=item; p.matchKeys[item.key]=true end
-			end
-			end
+            local filter=search:GetText() or ""
+            local baseQuery=table.concat({p.mode,filter,p.location,p.rarity,tostring(p.minLevel),tostring(p.maxLevel),p.slot},":")
+            if baseQuery~=p.baseQuery then
+                p.baseQuery=baseQuery; p.query=nil; p.baseMatches={}; p.categoryCounts={}; p.unknownMetadata=0
+                p.filterPasses=(p.filterPasses or 0)+1
+                local term=ItemSearch(filter)
+                for _,item in ipairs(p.items or {}) do
+                    if p.slot~="All" then AzerMind.EnrichCatalogItem(item) end
+                    local location=p.location=="All" or item.location==p.location or (p.mode=="catalog" and p.ownership[item.id] and p.ownership[item.id][p.location])
+                    local unknown=(p.rarity~=-1 and item.quality==nil) or (p.slot~="All" and (item.slot or "")=="") or ((p.minLevel or p.maxLevel) and item.level==nil)
+                    if location and SearchMatches(item,term) then
+                        if unknown then p.unknownMetadata=p.unknownMetadata+1 end
+                        local match=(p.rarity==-1 or item.quality==p.rarity)
+                            and (not p.minLevel or (item.level and item.level>=p.minLevel))
+                            and (not p.maxLevel or (item.level and item.level<=p.maxLevel))
+                            and (p.slot=="All" or item.slot==p.slot)
+                        if match then
+                            p.baseMatches[#p.baseMatches+1]=item
+                            local keys={"all",type(item.classID)=="number" and ("class:"..item.classID) or "other"}
+                            if type(item.classID)=="number" then keys[#keys+1]=type(item.subclassID)=="number" and ("sub:"..item.classID..":"..item.subclassID) or ("unknown:"..item.classID) end
+                            if accessorySlots[item.slot] then keys[#keys+1]="accessories" end
+                            for _,key in ipairs(keys) do p.categoryCounts[key]=(p.categoryCounts[key] or 0)+1 end
+                        end
+                    end
+                end
+            end
+            local query=baseQuery..":"..p.category..":"..tostring(p.onlySelected)
+            if query~=p.query then
+                p.query=query; p.page=1; visible={}; p.matchKeys={}; scroll:SetVerticalScroll(0)
+                for _,item in ipairs(p.baseMatches) do
+                    if Category(item,p.category) then
+                        p.matchKeys[item.key]=true
+                        if not p.onlySelected or p.selected[item.key] then visible[#visible+1]=item end
+                    end
+                end
+            end
 			for key in pairs(p.selected) do total=total+1; if not p.matchKeys[key] then hidden=hidden+1 end end
 			p.visible=visible
 			local pages=math.max(1,math.ceil(#visible/25)); p.page=math.min(p.page,pages)
@@ -220,16 +253,19 @@ function AzerMind.ShowItemPicker()
 			p.insert:SetText("Add to message ("..total..")"); p.insert:SetEnabled(total>0 and total<=100)
 			local cache=Cache(); p.bank:SetText(cache.updated and ("Bank · "..(bankOpen and "Live" or "Last updated "..cache.updated)) or "Open your bank to load its items.")
             if RenderTree then RenderTree() end
+            if p.UpdateFilterSummary then p.UpdateFilterSummary() end
+            if p.empty then
+                p.empty:SetShown(#visible==0); p.searchAll:SetShown(#visible==0 and p.category~="all")
+                p.emptyReset:SetShown(#visible==0)
+                p.empty:SetText(p.catalogError or ((p.minLevel and p.maxLevel and p.minLevel>p.maxLevel) and "Min level must not exceed Max level." or (p.unknownMetadata>0 and "No matching items with known metadata. Some item data is unavailable." or "No matching items. Broaden your category or clear a filter.")))
+            end
 			p.locationSelector.value=p.location; p.locationSelector:SetText((p.mode=="catalog" and "Owned in: " or "Location: ")..p.location)
 			if p.mode=="catalog" then
 				p.bank:SetText(total>100 and "Choose up to 100 items per attachment." or "Rarity and slot filters require client-cached data.")
 			end
-			local unknown=0; for _,item in ipairs(p.items or {}) do if item.quality==nil then unknown=unknown+1 end end
-			if unknown>0 and (p.rarity~=-1 or p.slot~="All") then
-				p.bank:SetText(unknown.." items have unknown metadata and may be excluded by rarity/slot filters.")
-			end
-			if total>100 then p.bank:SetText("Choose up to 100 items per attachment.") end
-			if p.minLevel and p.maxLevel and p.minLevel>p.maxLevel then p.bank:SetText("Required level: Min must not exceed Max.") end
+            if p.unknownMetadata>0 then p.bank:SetText(p.unknownMetadata.." items have missing data for the current filters.") end
+            if total>100 then p.bank:SetText("Choose up to 100 items per attachment.") end
+            if p.minLevel and p.maxLevel and p.minLevel>p.maxLevel then p.bank:SetText("Required level: Min must not exceed Max.") end
             p.rendering=false
 		end
 		p.previous=Button("Previous",92,256,-508,function() p.page=math.max(1,p.page-1); scroll:SetVerticalScroll(0); Render() end)
@@ -263,12 +299,14 @@ function AzerMind.ShowItemPicker()
                 if not row then
                     row=CreateFrame("Frame",nil,categoryContent); row:SetSize(188,34)
                     row.select=T.Button(row,"",164,32,function() p.SelectCategory(row.node.key) end,"LEFT")
-                    row.select:SetPoint("TOPLEFT",24,0)
+                    row.select:SetPoint("TOPLEFT",24,0); row.select.caption:SetWidth(114)
+                    row.count=T.Label(row,"",150,-9); row.count:SetWidth(36); row.count:SetJustifyH("RIGHT")
+                    T.Tooltip(row.select,function() return row.node.label end,"Counts follow the source and other filters.")
                     row.toggle=T.Button(row,"+",22,32,function() p.ToggleCategory(row.node.key) end)
                     row.toggle:SetPoint("TOPLEFT",0,0); p.categoryRows[index]=row
                 end
                 row.node=node; row:ClearAllPoints(); row:SetPoint("TOPLEFT",0,-(index-1)*34)
-                row.select:SetText((node.parent and "  " or "")..node.label)
+                row.select:SetText((node.parent and "  " or "")..node.label); row.count:SetText(tostring(p.categoryCounts[node.key] or 0))
                 row.toggle:SetShown(#node.children>0); row.toggle:SetText(p.expanded[node.key] and "-" or "+")
                 T.Selected(row.select,p.category==node.key); row:Show()
             end
@@ -297,12 +335,39 @@ function AzerMind.ShowItemPicker()
         for _,value in ipairs(slots) do slotOptions[#slotOptions+1]={key=value,label=_G[value] or value} end
         p.slotSelector=T.Selector(p,"Slot",156,slotOptions,"All",function(option) p.slot=option.key; Render() end)
         p.slotSelector:SetPoint("TOPLEFT",408,-180)
-		Button("Reset filters",152,736,-180,function()
-			p.location="All"; p.category="all"; p.rarity=-1; p.slot="All"; p.level=false; p.onlySelected=false
-			p.raritySelector:SetValue(-1,"All"); p.slotSelector:SetValue("All")
-			p.minLevel=nil; p.maxLevel=nil; p.minInput:SetText(""); p.maxInput:SetText(""); p.subclass=nil; p.selectedToggle:SetValue(false)
-			search:SetText(""); p.query=nil; Render()
-		end)
+        function p.ClearFilter(key)
+            p.changingFilters=true
+            if key=="search" or key=="all" then search:SetText("") end
+            if key=="category" or key=="all" then p.category="all" end
+            if key=="location" or key=="all" then p.location="All" end
+            if key=="rarity" or key=="all" then p.rarity=-1; p.raritySelector:SetValue(-1,"All") end
+            if key=="slot" or key=="all" then p.slot="All"; p.slotSelector:SetValue("All","All") end
+            if key=="level" or key=="all" then p.minLevel=nil;p.maxLevel=nil;p.minInput:SetText("");p.maxInput:SetText("") end
+            if key=="all" then p.onlySelected=false;p.selectedToggle:SetValue(false) end
+            p.changingFilters=false; p.query=nil; Render()
+        end
+        p.reset=Button("Reset filters",152,736,-180,function() p.ClearFilter("all") end)
+        p.filterMenu=Button("Filters: 0",200,32,-508,function()
+            T.ShowChoiceMenu(p.filterMenu,p.activeFilters or {},nil,function(option) p.ClearFilter(option.key) end,"Clear one filter")
+        end)
+        function p.UpdateFilterSummary()
+            local active={}
+            local function Add(key,label) active[#active+1]={key=key,label=label} end
+            if search:GetText()~="" then Add("search","Search: "..search:GetText()) end
+            if p.category~="all" then Add("category","Category: "..p.categoryNodes[p.category].label) end
+            if p.location~="All" then Add("location","Location: "..p.location) end
+            if p.rarity~=-1 then Add("rarity","Rarity: "..(_G["ITEM_QUALITY"..p.rarity.."_DESC"] or p.rarity)) end
+            if p.slot~="All" then Add("slot","Slot: "..(_G[p.slot] or p.slot)) end
+            if p.minLevel or p.maxLevel then Add("level","Level: "..(p.minLevel or "Any").." - "..(p.maxLevel or "Any")) end
+            p.activeFilters=active; p.filterMenu:SetText("Filters: "..#active);p.filterMenu:SetEnabled(#active>0)
+        end
+        p.empty=T.Label(scroll,"",16,-26);p.empty:SetWidth(570);p.empty:SetJustifyH("LEFT");p.empty:SetWordWrap(true)
+        p.searchAll=T.Button(scroll,"Search all items",180,30,function() p.ClearFilter("category") end)
+        p.searchAll:SetPoint("TOPLEFT",scroll,"TOPLEFT",16,-88)
+        p.emptyReset=T.Button(scroll,"Reset filters",160,30,function() p.ClearFilter("all") end)
+        p.emptyReset:SetPoint("TOPLEFT",scroll,"TOPLEFT",208,-88)
+        search:SetScript("OnEnterPressed",function() p.query=nil;Render() end)
+
 		local divider=p:CreateTexture(nil,"BORDER")
 		divider:SetHeight(1); divider:SetPoint("TOPLEFT",p,"TOPLEFT",32,-542); divider:SetPoint("TOPRIGHT",p,"TOPRIGHT",-32,-542)
 		T.Color(divider,"SetColorTexture","border")
@@ -345,10 +410,11 @@ function AzerMind.ShowItemPicker()
 		p.Refresh=function(metadataOnly)
 			T.SourceSelection(p,p.mode)
             p.selectedToggle:SetValue(p.onlySelected)
-            if not metadataOnly or p.rarity~=-1 or p.slot~="All" then p.query=nil end
+            p.query=nil; p.baseQuery=nil
 			local err
 			if p.mode=="catalog" then p.items,err=AzerMind.CatalogItemList() else p.items=AzerMind.OwnedItems() end
-			p.items=p.items or {}
+			p.catalogError=err
+            p.items=p.items or {}
             for _,item in ipairs(p.items) do
                 if item.classID==nil or (p.mode=="catalog" and (item.slot or "")=="") then
                     local _,_,_,slot,_,class,sub=Read(C_Item and C_Item.GetItemInfoInstant or GetItemInfoInstant,item.link or item.id)
@@ -381,5 +447,15 @@ events:SetScript("OnEvent",function(_,event)
 	if event=="BANKFRAME_OPENED" then bankOpen=true; ScanBank()
 	elseif event=="BANKFRAME_CLOSED" then bankOpen=false
 	elseif event=="BAG_UPDATE_DELAYED" then ScanBank() end
-	if picker and picker:IsShown() then picker.Refresh(event=="GET_ITEM_INFO_RECEIVED") end
+	if picker and picker:IsShown() then
+        if event=="GET_ITEM_INFO_RECEIVED" then
+            if not picker.metadataQueued then
+                picker.metadataQueued=true
+                C_Timer.After(0.1,function()
+                    picker.metadataQueued=nil
+                    if picker:IsShown() then picker.Refresh(true) end
+                end)
+            end
+        else picker.Refresh() end
+    end
 end)

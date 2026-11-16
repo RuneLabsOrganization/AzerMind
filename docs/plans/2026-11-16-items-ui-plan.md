@@ -137,10 +137,10 @@ cannot be certified by the Lua simulator alone.
 
 ### 3. Search and filters
 
-- [ ] Add word search, exact IDs/item links and explicit Search all items.
-- [ ] Group filters, active indicators, per-filter clearing and reset.
-- [ ] Add useful no-results, invalid-range and unavailable-data states.
-- [ ] Keep metadata refresh and bank snapshot wording accurate.
+- [x] Add word search, exact IDs/item links and explicit Search all items.
+- [x] Group filters, active indicators, per-filter clearing and reset.
+- [x] Add useful no-results, invalid-range and unavailable-data states.
+- [x] Keep metadata refresh and bank snapshot wording accurate.
 
 Automated checks: combined category/location/rarity/slot/level/search filters,
 cache update invalidation, unknown values and reset preserving selection.
@@ -196,3 +196,5 @@ search-versus-payload separation were made explicit above.
 Iteration 1: category-tree regression and four existing inventory/catalog regressions passed. Lua checks passed. Client visual review remains pending.
 
 Iteration 2: framed 920x660 layout, location selector, reserved category/result gutters and fixed selection footer passed geometry tests at three screen sizes, five item/auction tests and three existing picker compatibility checks. Client visual review remains pending.
+
+Iteration 3: four focused item regressions and three compatibility checks passed. Added word/ID/link search, category recovery, independently clearable filters, contextual empty states and filtered tree counts. Metadata refreshes are coalesced and invalidate the cache; scrolling/collapsing does not rescan items. Client visual review remains pending.

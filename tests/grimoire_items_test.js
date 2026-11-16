@@ -58,3 +58,39 @@ test('item window reserves separate tree, result, paging and selection regions a
   end
  `);
 });
+
+test('word, ID and pasted-link searches stay scoped and can broaden without changing item payloads',t=>{
+ const vm=fixture(t);
+ vm.run(`
+  function SEARCH(text) P.search:SetText(text);P.search.scripts.OnEnterPressed() end
+  P.selected['bags:1']=true; SEARCH('hat AZURE')
+  assert(#P.visible==1 and P.visible[1].id==1,'word search did not match independently')
+  P.SelectCategory('class:2');assert(#P.visible==0 and P.searchAll:IsShown(),'scope was silently ignored')
+  P.searchAll.scripts.OnClick();assert(#P.visible==1 and P.category=='all','Search all failed')
+  SEARCH('3');assert(#P.visible==1 and P.visible[1].id==3,'numeric ID search failed')
+  SEARCH('|cff00ff00|Hitem:3:0:0:0:0:0:99|h[Different label]|h|r')
+  assert(#P.visible==1 and P.visible[1].link=='item:3','pasted search replaced item payload')
+  P.ClearFilter('all');assert(#P.visible==6 and P.selected['bags:1'],'reset cleared selection')
+ `);
+});
+
+test('combined filters expose counts and incomplete metadata, refreshing only once for queued updates',t=>{
+ const vm=fixture(t);
+ vm.run(`
+  P.minInput:SetText('15');P.minInput.scripts.OnTextChanged(P.minInput)
+  P.maxInput:SetText('25');P.maxInput.scripts.OnTextChanged(P.maxInput)
+  assert(#P.visible==1 and P.visible[1].id==2,'required level range wrong')
+  assert(P.categoryCounts['class:4']==1 and not P.categoryCounts['sub:4:1'],'tree counts ignored filters')
+  P.minInput:SetText('30');P.minInput.scripts.OnTextChanged(P.minInput)
+  assert(#P.visible==0 and P.empty:GetText():find('Min level',1,true),'invalid range not explained')
+  P.ClearFilter('level');P.rarity=4;P.Refresh()
+  assert(#P.visible==0 and P.unknownMetadata>0,'missing metadata claimed as no results')
+  local passes=P.filterPasses;P.ToggleCategory('class:4')
+  for _,fn in ipairs(P.scroll.hooks.OnVerticalScroll) do fn() end
+  assert(P.filterPasses==passes,'scroll/expansion rescanned all items')
+  ITEMS[4].quality=4
+  STUB.FireEvent('GET_ITEM_INFO_RECEIVED');STUB.FireEvent('GET_ITEM_INFO_RECEIVED');STUB.RunTimers()
+  assert(#P.visible==1 and P.visible[1].id==4,'fresh metadata did not invalidate filter cache')
+  assert(P.filterPasses==passes+1,'metadata events were not coalesced')
+ `);
+});
