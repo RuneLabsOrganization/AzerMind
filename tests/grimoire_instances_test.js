@@ -84,3 +84,16 @@ test('oversized instance references are rejected atomically without replacing th
  assert.equal(vm.value('AzerMindInput:GetText()'),'Keep this question');
  assert.match(vm.value('P.count:GetText()'),/too large/);
 });
+test('reference rows are neutral until selected and never use primary action artwork',t=>{
+ const vm=boot(t);fixture(vm);
+ vm.run(`
+  for _,row in ipairs(P.rows) do assert(not row.grimoireFrame and not row.primary);assert(not row.selection:IsShown());assert(row:GetHeight()>=40) end
+  P.rows[1].scripts.OnClick(P.rows[1],'LeftButton')
+  assert(P.rows[1].selection:IsShown() and not P.rows[2].selection:IsShown())
+  P.rows[1].scripts.OnClick(P.rows[1],'RightButton')
+  assert(P.rows[1].selection:IsShown(),'opening details changed selection')
+  local d=AzerMindInstanceDetails
+  assert(not d.bossRows[1].grimoireFrame and d.bossRows[1].selection:IsShown())
+  assert(not d.lootRows[1].grimoireFrame and not d.lootRows[1].selection:IsShown())
+ `);
+});

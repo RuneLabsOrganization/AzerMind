@@ -1,6 +1,18 @@
 -- Bundled factual instance snapshot. Internal IDs are not Blizzard instance IDs.
 local T = AzerMindTheme
 local picker
+-- Reference lists are rows, not primary action buttons. Only actual selection
+-- receives a quiet background; reserve ornamental borders for window/actions.
+local function ReferenceRow(parent,width,height,x,y)
+ local row=CreateFrame("Button",nil,parent);row:SetSize(width,height);row:SetPoint("TOPLEFT",x,y)
+ row.selection=row:CreateTexture(nil,"BACKGROUND");row.selection:SetAllPoints();T.Color(row.selection,"SetColorTexture","selected");row.selection:SetAlpha(0.45);row.selection:Hide()
+ local hover=row:CreateTexture(nil,"HIGHLIGHT");hover:SetAllPoints();T.Color(hover,"SetColorTexture","hover")
+ local line=row:CreateTexture(nil,"BORDER");line:SetHeight(1);line:SetPoint("BOTTOMLEFT",0,0);line:SetPoint("BOTTOMRIGHT",0,0);T.Color(line,"SetColorTexture","border");line:SetAlpha(0.35)
+ return row
+end
+local function SelectReferenceRow(row,selected)
+ row.selectedState=selected and true or false;row.selection:SetShown(row.selectedState)
+end
 function AzerMind.InstanceByID(id)
  for _, record in ipairs(AzerMindInstanceData or {}) do if record.id == tonumber(id) then return record end end
 end
@@ -50,7 +62,6 @@ function AzerMind.ShowInstancePicker()
   table.insert(UISpecialFrames,"AzerMindInstancePicker")
   T.Label(p,"Dungeons & Raids",32,-28,T.fonts.title)
   T.Label(p,"Browse instances, bosses and recorded loot",32,-64)
-  local navigation=CreateFrame("Frame",nil,p);navigation:SetSize(204,332);navigation:SetPoint("TOPLEFT",24,-132);T.Panel(navigation,"frame-input",12);T.Material(navigation,"leather");navigation:SetFrameLevel(p:GetFrameLevel())
   T.Label(p,"Browse",32,-112,T.fonts.heading)
   p.selected={}; p.kind="All"; p.zone="All"; p.page=1; p.rows={}
   local Refresh
@@ -161,26 +172,26 @@ function AzerMind.ShowInstancePicker()
    for i=1,6 do
     local r=p.visible[(p.page-1)*6+i]; local row=p.rows[i]
     if not row then
-     row=T.Button(p,"",632,36,function() end,"LEFT",true); row:SetPoint("TOPLEFT",256,-264-(i-1)*39)
+     row=ReferenceRow(p,632,40,256,-252-(i-1)*40)
      local function Toggle() local id=row.record.id; p.selected[id]=not p.selected[id] or nil; Refresh() end
      row:RegisterForClicks("LeftButtonUp","RightButtonUp")
      local function Details() AzerMind.ShowInstanceDetails(row.record,p) end
      row:SetScript("OnClick",function(_,button) if button=="RightButton" then Details() else Toggle() end end)
      row.check=CreateFrame("CheckButton",nil,row,"UICheckButtonTemplate")
      row.check:SetSize(24,24); row.check:SetPoint("LEFT",row,"LEFT",4,0); row.check:SetScript("OnClick",Toggle)
-     row.name=T.Label(row,"",36,-6); T.Type(row.name,"mainLabel"); row.name:SetWidth(490); row.name:SetWordWrap(false); row.name:SetJustifyH("LEFT")
-     row.meta=T.Label(row,"",36,-23); row.meta:SetWidth(490); row.meta:SetWordWrap(false); row.meta:SetJustifyH("LEFT"); row.meta:SetTextColor(unpack(T.colors.muted))
+     row.name=T.Label(row,"",36,-4); T.Type(row.name,"mainLabel"); row.name:SetWidth(490); row.name:SetWordWrap(false); row.name:SetJustifyH("LEFT")
+     row.meta=T.Label(row,"",36,-24); row.meta:SetWidth(490); row.meta:SetWordWrap(false); row.meta:SetJustifyH("LEFT"); row.meta:SetTextColor(unpack(T.colors.muted))
      row.details=T.Button(row,"Details",84,28,Details); row.details:SetPoint("RIGHT",row,"RIGHT",-6,0)
      T.Tooltip(row,function() return row.record.name end,function() return "Location: "..row.record.location.."\nLeft-click to select. Details or right-click opens the reference." end)
      p.rows[i]=row
     end
     if r then
-     row.record=r; row.check:SetChecked(p.selected[r.id]); T.Selected(row,p.selected[r.id])
-     row.name:SetText(r.name); row.meta:SetText(r.type.."  |  Lv "..r.level.."  |  Location: "..r.location); row:Show()
+     row.record=r; row.check:SetChecked(p.selected[r.id]); SelectReferenceRow(row,p.selected[r.id])
+     row.name:SetText(r.name); row.meta:SetText(r.type.." · Lv "..r.level.." · "..r.location); row:Show()
      if p.search:GetText():find("%S") then
       local query=p.search:GetText():lower();local base=(r.name.." "..r.location):lower();local extra=false
       for word in query:gmatch("%S+") do if not base:find(word,1,true) then extra=true end end
-      if extra then row.meta:SetText("Boss / loot match · "..r.type.." · Lv "..r.level.." · "..r.location) end
+      if extra then row.meta:SetText("Boss / loot match · Lv "..r.level.." · "..r.location) end
      end
     else row:Hide() end
    end
@@ -266,8 +277,7 @@ do
    p.bossRows,p.lootRows={},{}
    local Refresh
    for i=1,7 do
-    local b=Button(left,"",222,12,-44-(i-1)*44,function() end)
-    b:SetHeight(40)
+    local b=ReferenceRow(left,222,40,12,-44-(i-1)*44)
     b.title=T.Label(b,"",10,-6,T.fonts.heading); b.title:SetWidth(202); b.title:SetWordWrap(false)
     b.meta=T.Label(b,"",10,-24); b.meta:SetWidth(202); b.meta:SetWordWrap(false); T.Color(b.meta,"SetTextColor","muted")
     b:SetScript("OnClick",function(self)
@@ -280,7 +290,7 @@ do
     p.bossRows[i]=b
    end
    for i=1,5 do
-    local b=Button(right,"",488,16,-126-(i-1)*44,function() end); b:SetHeight(40)
+    local b=ReferenceRow(right,488,40,16,-126-(i-1)*44)
     b:RegisterForClicks("LeftButtonUp","RightButtonUp")
     b.icon=b:CreateTexture(nil,"ARTWORK"); b.icon:SetSize(28,28); b.icon:SetPoint("TOPLEFT",6,-6)
     b.title=T.Label(b,"",44,-5,T.fonts.heading); b.title:SetWidth(428); b.title:SetWordWrap(false)
@@ -330,7 +340,7 @@ do
      if boss then
       b.boss=boss; b.index=index; b.title:SetText(boss.name)
       b.meta:SetText((index==p.bossIndex and "Viewing loot: " or "")..#(boss.loot or {}).." items")
-      T.Selected(b,index==p.bossIndex); b:Show()
+      SelectReferenceRow(b,index==p.bossIndex); b:Show()
      else b.boss=nil; b:Hide() end
     end
     p.bossPageLabel:SetText(p.bossPage.." / "..bossPages)
