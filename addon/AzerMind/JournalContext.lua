@@ -17,8 +17,9 @@ local function Text(value)
     if type(value) == "string" and value ~= "" then return value end
 end
 
-local function Normalize(value)
-    return ((Text(value) or ""):lower():gsub("[%c%p%s]+", " "):gsub("^ ", ""):gsub(" $", ""))
+local function Normalize(value, preserveCase)
+    local text = (Text(value) or ""):gsub("[%c%p%s]+", " "):gsub("^ ", ""):gsub(" $", "")
+    return preserveCase and text or text:lower()
 end
 
 local function ID(value)
@@ -87,15 +88,23 @@ function AzerMind.ResolveDungeonQuestion(rawText)
         end
         return " "
     end)
-    text = " " .. Normalize(text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")) .. " "
+    local spelling = " " .. Normalize(text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""), true) .. " "
+    text = spelling:lower()
 
-    local function Match(name, alias)
+    local function Match(name, alias, journalAlias)
         local phrase = Normalize(alias)
         if phrase == "" then return end
+        if journalAlias and #phrase == 1 then return end
+        local ordinaryWords = {vc=true,da=true,de=true,["do"]=true,as=true,os=true,em=true,no=true,na=true,se=true}
+        local shortAlias = journalAlias and ordinaryWords[phrase]
+        -- Short journal search terms can also be ordinary words, including Portuguese "vc" (you).
+        local allowBareAlias = phrase ~= "vc"
         phrase = " " .. phrase .. " "
         local start, finish = text:find(phrase, 1, true)
         while start do
-            matches[#matches + 1] = { name = name, start = start, finish = finish }
+            if not shortAlias or (allowBareAlias and text == phrase) or spelling:sub(start, finish) == phrase:upper() then
+                matches[#matches + 1] = { name = name, start = start, finish = finish }
+            end
             start, finish = text:find(phrase, finish, true)
         end
     end
@@ -112,8 +121,14 @@ function AzerMind.ResolveDungeonQuestion(rawText)
     local aliases = Table(journal.DUNGEON_SEARCH_ALIASES)
     for name in pairs(known) do
         -- Removing the article also matches the full name because of the word boundaries.
-        Match(name, Normalize(name):gsub("^the ", ""))
-        for _, alias in ipairs(Table(aliases[name])) do Match(name, alias) end
+        local namePhrase = Normalize(name):gsub("^the ", "")
+        Match(name, namePhrase)
+        for _, alias in ipairs(Table(aliases[name])) do Match(name, alias, true) end
+        if namePhrase == "scarlet monastery graveyard" then
+            Match(name, "scarlet graveyard")
+            Match(name, "scarlet cemetery")
+            Match(name, "scarlet cemitery")
+        end
     end
     -- Prefer the more specific phrase at the same location, for example DM West over DM.
     table.sort(matches, function(a, b)
