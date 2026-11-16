@@ -177,3 +177,24 @@ test('guide plus/minus stays bounded at twenty rows and keyboard focus scrolls w
   assert(#P.rows==20,'row controls grew without bound')
  `);
 });
+
+test('guide rows align readable text and controls without a heavy card or an empty scrollbar',t=>{
+ const vm=boot(t);
+ vm.run(fs.readFileSync(path.join(__dirname,'helpers/grimoire-geometry.lua'),'utf8'));
+ vm.run(`
+  AzerMind.SaveGuideReferences('https://mobalytics.gg/wow-forever/classes/warlock-leveling-guide')
+  AzerMind.ShowGuideSettings();local p=AzerMindGuideSettings;local row=p.rows[1]
+  assert(not row.grimoireFrame,'row still has its own heavy outer frame')
+  assert(row.title.justifyH=='LEFT' and row.input.justifyH=='LEFT','guide text not left-aligned')
+  assert(row.input.font.size>=16,'URL text too small')
+  local title,field,remove=GR_Bounds(row.title),GR_Bounds(row.inputWell),GR_Bounds(row.remove)
+  assert(title.left==field.left and title.bottom>field.top,'guide title not aligned above field')
+  assert(field.top==remove.top and field.height==remove.height,'remove action not aligned with field')
+  assert(remove.left-field.right>=12,'input and remove button touch')
+  assert(not p.scroll.ScrollBar:IsShown(),'single guide has an unnecessary empty scrollbar')
+  for i=2,4 do p.add.scripts.OnClick() end
+  assert(p.scroll.ScrollBar:IsShown(),'overflow lost its scrollbar')
+  for i=4,2,-1 do p.rows[i].remove.scripts.OnClick() end
+  assert(not p.scroll.ScrollBar:IsShown(),'scrollbar remains after removing overflow')
+ `);
+});

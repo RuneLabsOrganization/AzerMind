@@ -115,6 +115,7 @@ function Methods.CreateFontString(self, name)
     local region=NewObject("FontString",name,self); region.height=14; return region
 end
 function Methods.SetWordWrap(self, enabled) self.wordWrap=enabled end
+function Methods.SetJustifyH(self, alignment) self.justifyH=alignment end
 function Methods.CreateAnimationGroup(self) return NewObject("AnimationGroup", nil, self) end
 function Methods.CreateAnimation(self) return NewObject("Animation", nil, self) end
 function Methods.IsPlaying(self) return self.playing or false end

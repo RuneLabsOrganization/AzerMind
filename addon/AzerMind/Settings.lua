@@ -378,11 +378,13 @@ function AzerMind.ShowGuideSettings()
         local help=Label(p,"Add the guides you want the AI to consult. Applies to all conversations.",24,-54)
         help:SetWidth(572); help:SetJustifyH("LEFT")
         p.count=Label(p,"",24,-94)
+        p.count:SetJustifyH("LEFT"); Theme.Color(p.count,"SetTextColor","muted")
         local scroll=CreateFrame("ScrollFrame","AzerMindGuideListScroll",p,"UIPanelScrollFrameTemplate")
         scroll:SetPoint("TOPLEFT",p,"TOPLEFT",24,-132); scroll:SetSize(540,260)
         Theme.Scrollbar(scroll); p.scroll=scroll
         local content=CreateFrame("Frame",nil,scroll); content:SetSize(532,1); scroll:SetScrollChild(content)
         p.rows={}; p.entries={}; p.focusedIndex=1
+        local rowStep=84
         p.status=Label(p,"",24,-408); p.status:SetWidth(572); p.status:SetJustifyH("LEFT")
         local function TrimURL(value) return (value or ""):match("^%s*(.-)%s*$") end
         local function Serialize()
@@ -391,12 +393,12 @@ function AzerMind.ShowGuideSettings()
             return table.concat(result,"\n")
         end
         function p.ClearFocus()
-            for _,row in ipairs(p.rows) do row.input:ClearFocus() end
+            for _,row in ipairs(p.rows) do row.input:ClearFocus(); Theme.Focus(row.inputWell,false) end
         end
         local function FocusRow(index)
             local row=p.rows[index]; if not row or not row:IsShown() then return end
-            p.ClearFocus(); p.focusedIndex=index; row.input:SetFocus()
-            local top,bottom=(index-1)*80,index*80
+            p.ClearFocus(); p.focusedIndex=index; row.input:SetFocus(); Theme.Focus(row.inputWell,true)
+            local top,bottom=(index-1)*rowStep,index*rowStep
             local offset=scroll:GetVerticalScroll()
             if top<offset then offset=top elseif bottom>offset+scroll:GetHeight() then offset=bottom-scroll:GetHeight() end
             scroll:SetVerticalScroll(math.max(0,math.min(offset,math.max(0,content:GetHeight()-scroll:GetHeight()))))
@@ -441,22 +443,30 @@ function AzerMind.ShowGuideSettings()
             for index,value in ipairs(p.entries) do
                 local row=p.rows[index]
                 if not row then
-                    row=CreateFrame("Frame",nil,content,"BackdropTemplate"); row:SetSize(532,76); row:EnableMouse(true)
-                    Theme.Panel(row,"frame-input",6)
-                    row.title=Label(row,"",12,-4); row.title:SetWidth(496); row.title:SetWordWrap(false)
-                    row.input=CreateFrame("EditBox",nil,row,"InputBoxTemplate")
-                    row.input:SetSize(452,30); row.input:SetPoint("TOPLEFT",row,"TOPLEFT",16,-26)
+                    row=CreateFrame("Frame",nil,content); row:SetSize(532,80); row:EnableMouse(true)
+                    row.title=Label(row,"",0,-2); row.title:SetWidth(532); row.title:SetWordWrap(false); row.title:SetJustifyH("LEFT")
+                    Theme.Type(row.title,"heading")
+                    row.inputWell=CreateFrame("Frame",nil,row,"BackdropTemplate")
+                    row.inputWell:SetSize(480,36); row.inputWell:SetPoint("TOPLEFT",row,"TOPLEFT",0,-24)
+                    Theme.Panel(row.inputWell,"button-secondary",6); row.inputWell:EnableMouse(true)
+                    row.inputWell:SetScript("OnMouseDown",function() FocusRow(row.index) end)
+                    row.input=CreateFrame("EditBox",nil,row.inputWell)
+                    row.input:SetSize(480,36); row.input:SetPoint("TOPLEFT",row.inputWell,"TOPLEFT",0,0)
+                    row.input:SetTextInsets(10,10,0,0); row.input:SetJustifyH("LEFT")
                     row.input:SetAutoFocus(false); row.input:SetMultiLine(false); row.input:SetMaxLetters(10000)
-                    Theme.Type(row.input,"body"); Theme.Color(row.input,"SetTextColor","text")
-                    row.feedback=Label(row,"",12,-60); row.feedback:SetWidth(504); row.feedback:SetWordWrap(false)
-                    row.remove=Theme.Button(row,"-",36,30,function()
+                    Theme.Type(row.input,"paperBody"); Theme.Color(row.input,"SetTextColor","text")
+                    row.feedback=Label(row,"",0,-64); row.feedback:SetWidth(532); row.feedback:SetWordWrap(false); row.feedback:SetJustifyH("LEFT")
+                    local divider=row:CreateTexture(nil,"BORDER"); divider:SetHeight(1)
+                    divider:SetPoint("BOTTOMLEFT",row,"BOTTOMLEFT",0,0); divider:SetPoint("BOTTOMRIGHT",row,"BOTTOMRIGHT",0,0)
+                    local border=Theme.colors.border; divider:SetColorTexture(border[1],border[2],border[3],0.35)
+                    row.remove=Theme.Button(row,"-",36,36,function()
                         local removed=row.index
                         GameTooltip:Hide()
                         p.ClearFocus(); table.remove(p.entries,removed)
                         if #p.entries==0 then p.entries[1]="" end
                         Render(); FocusRow(math.min(removed,#p.entries))
                     end)
-                    row.remove:SetPoint("TOPLEFT",row,"TOPLEFT",484,-26)
+                    row.remove:SetPoint("TOPLEFT",row,"TOPLEFT",496,-24)
                     Theme.Tooltip(row.remove,function() return "Remove guide "..row.index end,"Removal takes effect when you save. Cancel restores saved links.")
                     Theme.Tooltip(row.input,function() return TrimURL(row.input:GetText()) end)
                     row:SetScript("OnMouseDown",function() FocusRow(row.index) end)
@@ -464,7 +474,8 @@ function AzerMind.ShowGuideSettings()
                         if p.rendering then return end
                         self=self or row.input; p.entries[row.index]=self:GetText() or ""; Validate()
                     end)
-                    row.input:SetScript("OnEditFocusGained",function() p.focusedIndex=row.index end)
+                    row.input:SetScript("OnEditFocusGained",function() p.focusedIndex=row.index; Theme.Focus(row.inputWell,true) end)
+                    row.input:SetScript("OnEditFocusLost",function() Theme.Focus(row.inputWell,false) end)
                     row.input:SetScript("OnEscapePressed",function(self) (self or row.input):ClearFocus() end)
                     row.input:SetScript("OnEnterPressed",function()
                         if row.index<#p.entries then FocusRow(row.index+1) else AddGuide() end
@@ -475,12 +486,22 @@ function AzerMind.ShowGuideSettings()
                     end)
                     p.rows[index]=row
                 end
-                row.index=index; row:ClearAllPoints(); row:SetPoint("TOPLEFT",content,"TOPLEFT",0,-(index-1)*80)
+                row.index=index; row:ClearAllPoints(); row:SetPoint("TOPLEFT",content,"TOPLEFT",0,-(index-1)*rowStep)
                 row.input:SetText(value); row:Show()
             end
             for index=#p.entries+1,#p.rows do p.rows[index].input:ClearFocus(); p.rows[index]:Hide() end
-            content:SetHeight(math.max(1,#p.entries*80))
+            content:SetHeight(math.max(1,#p.entries*rowStep))
             scroll:UpdateScrollChildRect()
+            local overflow=content:GetHeight()>scroll:GetHeight()
+            local bar=scroll.ScrollBar or _G["AzerMindGuideListScrollScrollBar"]
+            if bar then
+                bar:SetShown(overflow)
+                for _,key in ipairs({"ScrollUpButton","ScrollDownButton"}) do
+                    local arrow=bar[key] or scroll[key] or _G["AzerMindGuideListScrollScrollBar"..key]
+                    if arrow then arrow:SetShown(overflow) end
+                end
+            end
+            if not overflow then scroll:SetVerticalScroll(0) end
             p.input=p.rows[1].input -- first-row alias for existing focus/diagnostic callers
             p.rendering=false; Validate()
         end

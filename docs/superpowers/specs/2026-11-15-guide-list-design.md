@@ -25,3 +25,8 @@ The complete suite passed 319 tests and all 16 Windows codec cases. Final
 mouse/tooltip/scroll-range refinements passed all eight settings regressions and
 Lua declaration/syntax checks. Existing guide variant tests also passed. Actual
 in-game visual review remains separate; reload Settings.lua to inspect the result.
+
+2026-11-16 screenshot refinement: remove the heavy outer card from each row;
+left-align site labels; use a 16px Grimoire URL font inside a single bronze field;
+align the minus control with that field, retain a subtle separator and hide the
+scrollbar while the list fits. All 165 UI regressions passed after this refinement.
