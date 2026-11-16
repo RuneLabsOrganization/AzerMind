@@ -1,5 +1,17 @@
 # Known issues
 
+## Character context stays at an old level or talent allocation
+
+The bridge keeps its last snapshot across restarts. A saved snapshot is not proof that the helper is running or that the addon has sent current data. **Connect** sends a handshake from the addon; it cannot launch the Windows helper. Start the bridge with `npm start` or the Windows launcher, then keep WoW visible long enough for the pixel transmission to finish. Starting a second bridge against the same configuration can make the processes compete for the same files.
+
+Before the context synchronization fix, character data was sent only at login, Connect, or with a question. An unrelated presence heartbeat could also acknowledge a fragmented hello prematurely, removing its context before the bridge received it.
+
+The fix sends changed, consent-filtered context every 30 seconds while connected, outside combat, and with the transport idle. These records update the local snapshot without starting an AI request. Message-specific acknowledgements replace the presence shortcut. Retries and out-of-order delivery cannot overwrite a newer snapshot.
+
+Install both the addon and bridge changes, restart the bridge, then use `/reload` when safe. No new addon folder is required. In `bridge/bridge.log`, look for `game context updated` and `context sync #...`. In `bridge/state.json`, `context.at` is the last content change, `context.receivedAt` is its last accepted receipt, and `contextReceipt` identifies the last accepted context-bearing message. Unchanged snapshots are not resent; these timestamps can therefore remain stable while the character is idle. An empty shared context clears `context`, while the receipt metadata remains for ordering.
+
+This transport still requires the helper and a visible, unobstructed pixel strip. It does not read game memory or control gameplay. If the helper is stopped, the last saved snapshot remains historical until a new transmission arrives.
+
 ## Sending message stalls on Windows
 
 On an affected Windows setup, the addon can stay on **Sending message** while the pixel strip is visible and the bridge reports `capture: attached to ...`. The console may show repeated `strip seen but rejected: checksum` warnings or no matching `strip #N` line. A green connection light means the addon has recently heard from the bridge through a reply slot or presence signal. A matching `(pixel) ... starting` line confirms that an outgoing request reached the bridge.

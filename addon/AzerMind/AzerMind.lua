@@ -40,6 +40,8 @@ local POLL_TAIL = 60
 local TICK_SECONDS = 2
 local CONNECT_WAIT = 15 -- seconds the Connect button waits for the bridge before giving up
 local HELLO_POLL_SCHEDULE = { 5, 10, CONNECT_WAIT }
+local CONTEXT_SYNC_SECONDS, CONTEXT_SYNC_TIMEOUT = 30, 60
+local CONTEXT_POLL_SECONDS = 15
 local IDLE_POLL_SECONDS = 600 -- without the sound channel, spend one slot this often while idle to check the bridge
 local RS, US = "\30", "\31" -- record / unit separators in the strip payload
 
@@ -726,11 +728,13 @@ local function ActivityLine(chat)
 	return s
 end
 
-local function FreeSlot()
+local function FreeSlot(reserve)
+	local first, free = nil, 0
 	for i = 1, SLOT_COUNT do
 		local name = SlotName(i)
 		if not C_AddOns.IsAddOnLoaded(name) then
-			return name
+			first, free = first or name, free + 1
+			if free > (reserve or 0) then return first end
 		end
 	end
 end
@@ -748,15 +752,20 @@ local Finish -- defined below
 
 -- The bridge has read this record: whatever game context rode on it is now
 -- what the bridge knows, so later messages only carry it again if it changes.
-local function NoteAcked(rec)
+local function NoteAcked(rec, id)
 	rec.acked = true
-	if rec.ctx ~= nil then run.contextSent = rec.ctx end
+	if rec.ctx ~= nil and id >= (run.contextSentId or 0) then
+		run.contextSent, run.contextSentId = rec.ctx, id
+		if rec.contextRevision ~= nil and rec.contextRevision == run.contextRevision then
+			run.contextRefreshPending = nil
+		end
+	end
 end
 
 local function MarkAcked(id)
 	local rec = run.outbound[id]
 	if rec and not rec.acked then
-		NoteAcked(rec)
+		NoteAcked(rec, id)
 		RefreshStrip()
 	end
 	NotedBridge()
@@ -767,6 +776,10 @@ local function ApplyReplies(replies)
 	local matched = false
 	for _, r in ipairs(replies or {}) do
 		local outbound = run.outbound[r.id]
+		if outbound and outbound.hello and r.session == db.session
+			and r.status == (outbound.contextSync and "context-ack" or "hello-ack") then
+			MarkAcked(r.id)
+		end
 		if outbound and outbound.cancel and r.session == db.session and r.status == "cancel-ack" then MarkAcked(r.id) end
 		if outbound and outbound.catalogRefresh and r.session==db.session and (r.status=="models-refreshed" or r.status=="models-error") then
 			MarkAcked(r.id); run.modelsPending=nil
@@ -909,15 +922,16 @@ local function PollHello(now)
 	-- The deadline poll can fall on the next tick when Connect was clicked
 	-- between ticks. CheckConnection runs after this poll.
 	if now > hello.startedAt + CONNECT_WAIT + TICK_SECONDS then return end
-	-- The first poll can carry a restore or metadata even if a sound file
-	-- already proved the bridge is alive.
-	if hello.index > 1 and run.bridgeSeen and run.bridgeSeen >= hello.startedAt then return end
+	-- Presence proves that the bridge is running, not that it read this hello.
+	-- Always read the first metadata/restore slot; later polls need a pending ID.
+	local rec = run.outbound[hello.id]
+	if hello.index > 1 and (not rec or rec.acked) then return end
 	TryLoadSlot("hello")
 	if run.restoring then
 		run.restoring = nil
 		AzerMind.Render()
 	end
-	if run.slotsExhausted or run.slotsMissing or (run.bridgeSeen and run.bridgeSeen >= hello.startedAt) then return end
+	if run.slotsExhausted or run.slotsMissing or not rec or rec.acked then return end
 	for index = hello.index + 1, #HELLO_POLL_SCHEDULE do
 		if hello.startedAt + HELLO_POLL_SCHEDULE[index] > now then
 			hello.index = index
@@ -926,6 +940,8 @@ local function PollHello(now)
 		end
 	end
 end
+
+local SyncContext -- defined with the context builder below
 
 local function Tick()
 	if not db then return end
@@ -961,23 +977,33 @@ local function Tick()
 		end
 	end
 	for id, rec in pairs(run.outbound) do
-		if not rec.settings and not rec.catalogRefresh and not rec.cancel and not rec.acked and CheckSignal("ack", id) then
-			NoteAcked(rec)
-			changed = true
-			NotedBridge()
+		if not rec.settings and not rec.catalogRefresh and not rec.cancel and not rec.acked then
+			local valid = CheckSignal("ack", id)
+			if rec.ackBlocked then
+				-- Signal files wrap after 200 IDs. An already valid file is stale
+				-- until it becomes invalid; a session/ID receipt remains authoritative.
+				if not valid then rec.ackBlocked = nil end
+			elseif valid then
+				NoteAcked(rec, id)
+				changed = true
+				NotedBridge()
+			end
 		end
-		-- A hello only needs the bridge to have been seen; it never escalates.
-		-- A forget is the same, but the bridge must have been seen a moment after
-		-- the record went up, so it had a chance to read it.
-		if rec.hello and not rec.acked and run.bridgeSeen and run.bridgeSeen >= rec.sentAt then
-			NoteAcked(rec)
-			changed = true
+		if rec.contextSync and not rec.acked and now - rec.sentAt < CONTEXT_SYNC_TIMEOUT
+			and now >= rec.nextPollAt and not AnyPending() and not InCombatLockdown() then
+			rec.nextPollAt = now + CONTEXT_POLL_SECONDS
+			-- Preserve the final reply slots for user initiated work; never request a reload.
+			if not run.slotsMissing and not run.slotsExhausted and FreeSlot(5) then TryLoadSlot("context") end
 		end
 		if rec.acked then
 			if rec.forget then db.forget[rec.forget] = nil end
 			run.outbound[id] = nil
 			changed = true
-		elseif rec.hello and now - rec.sentAt >= 20 then
+		elseif rec.contextSync and now - rec.sentAt >= CONTEXT_SYNC_TIMEOUT then
+			run.outbound[id] = nil
+			run.nextContextSync = now + CONTEXT_SYNC_SECONDS
+			changed = true
+		elseif rec.hello and not rec.contextSync and now - rec.sentAt >= 20 then
 			run.outbound[id] = nil
 			changed = true
 		elseif now - rec.sentAt >= STRIP_SECONDS then
@@ -1011,6 +1037,7 @@ local function Tick()
 		RefreshStrip()
 		AzerMind.UpdateStatus()
 	end
+	SyncContext(now)
 	if not AnyPending() then return end
 	local moved = false
 	for _, c in ipairs(db.chats) do
@@ -1244,11 +1271,22 @@ function AzerMind.ReplySound(value)
     if value~=nil and allowed[value] then db.settings.replySound=value end
     return db.settings.replySound==nil and 3081 or db.settings.replySound
 end
+local function ClearContextAnnouncements()
+	-- Consent can change while a fragmented snapshot is still on the strip.
+	for id, rec in pairs(run.outbound) do if rec.hello then run.outbound[id] = nil end end
+	run.helloPoll, run.lastHelloAt, run.contextSent = nil, nil, nil
+	run.contextRevision = (run.contextRevision or 0) + 1
+	run.contextRefreshPending = true -- retain consent changes through disconnection/timeouts
+	RefreshStrip()
+	if AzerMind.IsConnected() then AzerMind.SayHello() end
+end
+
 function AzerMind.SaveContextSettings(options, enabled)
 	db.settings.contextFields = AzerMind.ContextOptions(options)
 	db.settings.contextMode = "custom"
 	db.settings.context = enabled == true
 	run.contextSent = nil
+	ClearContextAnnouncements()
 	AzerMind.Render()
 end
 function AzerMind.GameContext(mode, inventoryOverride)
@@ -1441,9 +1479,27 @@ end
 -- "" when the setting is off, so the bridge drops what it had.
 local function ContextToSend(room)
 	local ctx = SharedContext()
-	if ctx == (run.contextSent or "") then return nil end
+	if not run.contextRefreshPending and ctx == (run.contextSent or "") then return nil end
 	if room and #ctx > room then return nil end
 	return ctx
+end
+
+SyncContext = function(now)
+	if not run.nextContextSync then run.nextContextSync = now + CONTEXT_SYNC_SECONDS; return end
+	if now < run.nextContextSync then return end
+	if (not db.settings.context and not run.contextRefreshPending) or not AzerMind.IsConnected() or AnyPending() or InCombatLockdown() then return end
+	for _, rec in pairs(run.outbound) do if not rec.acked then return end end
+	run.nextContextSync = now + CONTEXT_SYNC_SECONDS
+	local ctx = ContextToSend()
+	if ctx == nil then return end
+	db.lastSeq = db.lastSeq + 1
+	local id, c = db.lastSeq, ActiveChat()
+	-- The hello flag keeps older bridges from starting an AI job for this record.
+	run.outbound[id] = { chat = c and c.id or "", cwd = c and c.cwd or "", flags = "h;u",
+		name = c and c.name or "", text = "", ctx = ctx, sentAt = now, hello = true,
+		contextSync = true, contextRevision = run.contextRevision,
+		nextPollAt = now + CONTEXT_POLL_SECONDS, ackBlocked = CheckSignal("ack", id) }
+	RefreshStrip()
 end
 
 -- Read a link's tooltip off a hidden GameTooltip, one line per row.
@@ -1626,7 +1682,7 @@ function AzerMind.Send(text, allow)
 	db.settings.shown = true
 
 	if db.settings.mode == "pixel" then
-		run.outbound[id] = { chat = c.id, cwd = c.cwd, flags = flags, name = c.name, text = text, ctx = ctx, sentAt = GetTime() }
+		run.outbound[id] = { chat = c.id, cwd = c.cwd, flags = flags, name = c.name, text = text, ctx = ctx, sentAt = GetTime(), ackBlocked = CheckSignal("ack", id) }
 		run.sentAt = GetTime()
 		run.polls = 0
 		StartActivity(c, id)
@@ -1649,7 +1705,7 @@ local function SendForget(chatId)
 	end
 	local info = db.forget[chatId] or {}
 	db.lastSeq = db.lastSeq + 1
-	run.outbound[db.lastSeq] = { chat = chatId, cwd = info.cwd or "", flags = "d", name = info.name or "", text = "", sentAt = GetTime(), forget = chatId }
+	run.outbound[db.lastSeq] = { chat = chatId, cwd = info.cwd or "", flags = "d", name = info.name or "", text = "", sentAt = GetTime(), forget = chatId, ackBlocked = CheckSignal("ack", db.lastSeq) }
 	RefreshStrip()
 end
 
@@ -1672,8 +1728,8 @@ function AzerMind.SayHello()
 	db.lastSeq = db.lastSeq + 1
 	local c = ActiveChat()
 	local ctx = SharedContext()
-	run.outbound[db.lastSeq] = { chat = c and c.id or "", cwd = c and c.cwd or "", flags = "h", name = c and c.name or "", text = "", ctx = ctx, sentAt = now, hello = true }
-	run.helloPoll = { startedAt = now, index = 1 }
+	run.outbound[db.lastSeq] = { chat = c and c.id or "", cwd = c and c.cwd or "", flags = "h", name = c and c.name or "", text = "", ctx = ctx, sentAt = now, hello = true, contextRevision = run.contextRevision, ackBlocked = CheckSignal("ack", db.lastSeq) }
+	run.helloPoll = { id = db.lastSeq, startedAt = now, index = 1 }
 	-- Deletions the bridge never confirmed ride along with the hello.
 	for id in pairs(db.forget) do SendForget(id) end
 	-- Fresh saved data: show "restoring" instead of an empty panel until we hear back.
@@ -1700,7 +1756,7 @@ function AzerMind.Resend()
 		end
 	end
 	if not text then return end
-	run.outbound[c.pendingId] = { chat = c.id, cwd = c.cwd, flags = (c.agent and c.agent ~= "") and ("agent=" .. c.agent) or "", name = c.name, text = text, sentAt = GetTime() }
+	run.outbound[c.pendingId] = { chat = c.id, cwd = c.cwd, flags = (c.agent and c.agent ~= "") and ("agent=" .. c.agent) or "", name = c.name, text = text, sentAt = GetTime(), ackBlocked = CheckSignal("ack", c.pendingId) }
 	do
 		local options = AzerMind.ChatAISettings(c)
 		local rec = run.outbound[c.pendingId]
@@ -3938,7 +3994,8 @@ SlashCmdList["AZERMIND"] = function(msg)
 			-- Make sure the next record carries the change, hello throttle or not.
 			run.contextSent = nil
 			run.lastHelloAt = nil
-			if AzerMind.IsConnected() then AzerMind.SayHello() end
+			if not s.context then ClearContextAnnouncements()
+			elseif AzerMind.IsConnected() then AzerMind.SayHello() end
 		end
 		local ctx = AzerMind.GameContext()
 		AddHistory(c, "system", (s.context
