@@ -257,7 +257,13 @@ For next-step leveling advice, AzerMind can read a selected RestedXP guide and r
 
 ## Development and packaging
 
+The test suite requires Python 3 with Pillow for image validation. Use an activated
+virtual environment if your system Python disallows installing packages. CI uses
+Python 3.12 on both Windows and Linux. These are development dependencies; the
+Windows bridge does not require Pillow.
+
 ```sh
+python -m pip install -r requirements-dev.txt
 npm install
 npm test
 npm run verify:install
