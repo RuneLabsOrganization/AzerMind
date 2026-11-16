@@ -3454,7 +3454,16 @@ local function BuildUI()
 		inputBg.hint:SetJustifyH("LEFT"); inputBg.hint:SetWordWrap(false)
 		AzerMindTheme.Type(inputBg.hint,"label")
 		inputBg.hint:SetText("Enter to send - Shift+Enter for new line"); AzerMindTheme.PaperFont(inputBg.hint,true)
-		input:HookScript("OnTextChanged",function(self) inputBg.placeholder:SetShown((self:GetText() or "")=="") end)
+		local function UpdateInputPrompt()
+			-- While focused, show the native blinking edit cursor instead of a placeholder.
+			inputBg.placeholder:SetShown(not input:HasFocus() and (input:GetText() or "") == "")
+			inputBg.hint:SetText(input:HasFocus() and "Typing - Enter to send - Shift+Enter for new line"
+				or "Enter to send - Shift+Enter for new line")
+		end
+		input:HookScript("OnTextChanged", UpdateInputPrompt)
+		input:HookScript("OnEditFocusGained", UpdateInputPrompt)
+		input:HookScript("OnEditFocusLost", UpdateInputPrompt)
+		UpdateInputPrompt()
 	end
 	ui.input = input
 	local equipment = MakeButton(f, "Items", 96, function() if AzerMind.ShowItemPicker then AzerMind.ShowItemPicker() end end)
