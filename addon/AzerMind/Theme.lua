@@ -149,7 +149,22 @@ end
 function T.Focus(frame, focused)
 	frame.grimoireFocused=focused
 	if frame.grimoireFrame then
-		for _,part in ipairs(frame.grimoireFrame.parts) do part:SetVertexColor(focused and 1 or 0.95,focused and 1 or 0.95,focused and 1 or 0.95,1) end
+		for index, part in ipairs(frame.grimoireFrame.parts) do
+			if focused and index ~= 5 then
+				-- Tint the existing frame edges gold without changing the paper center.
+				part:SetVertexColor(1, T.colors.gold[2], T.colors.gold[3], 1)
+			else
+				local value = focused and 1 or 0.95
+				part:SetVertexColor(value, value, value, 1)
+			end
+		end
+	end
+	if frame.SetBackdropBorderColor then
+		if focused then
+			frame:SetBackdropBorderColor(unpack(T.colors.gold))
+		else
+			frame:SetBackdropBorderColor(unpack(T.colors.border))
+		end
 	end
 end
 function T.ActionIcon(button, name)
