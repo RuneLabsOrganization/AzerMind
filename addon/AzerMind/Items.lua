@@ -156,8 +156,8 @@ function AzerMind.ShowItemPicker()
 		end
 		Button("X",30,858,-24,function() p:Hide() end)
 		p.mode="owned"
-		local tab=Button("My items",128,32,-66,function() p.mode="owned"; p.location="All"; p.onlySelected=false; p.Refresh() end)
-		local db=Button("Item database",148,172,-66,function() p.mode="catalog"; p.location="All"; p.onlySelected=false; p.Refresh() end)
+		local tab=Button("My items",128,32,-66,function() p.mode="owned"; p.location="All"; p.onlySelected=false;p.reviewState=nil; p.Refresh() end)
+		local db=Button("Item database",148,172,-66,function() p.mode="catalog"; p.location="All"; p.onlySelected=false;p.reviewState=nil; p.Refresh() end)
 		p.version=T.Label(p,"",340,-74); p.version:SetWidth(548); p.version:SetJustifyH("LEFT")
 		local search=T.SearchField(p,nil,632,"Search by name, type, or item ID")
 		search:SetPoint("TOPLEFT",256,-128); p.search=search
@@ -176,6 +176,13 @@ function AzerMind.ShowItemPicker()
 		local categoryButtons, locationButtons={},{}
         p.expanded={}; p.categoryRows={}; p.categoryCounts={}
         local RenderTree
+        local function SelectionCount()
+            local count=0;for _,selected in pairs(p.selected) do if selected then count=count+1 end end;return count
+        end
+        local function BrowseMode()
+            p.onlySelected=false;p.reviewState=nil
+            if p.selectedToggle then p.selectedToggle:SetValue(false) end
+        end
 		local function Render()
 			if p.rendering or p.changingFilters then return end
 			p.rendering=true
@@ -212,12 +219,20 @@ function AzerMind.ShowItemPicker()
                 for _,item in ipairs(p.baseMatches) do
                     if Category(item,p.category) then
                         p.matchKeys[item.key]=true
-                        if not p.onlySelected or p.selected[item.key] then visible[#visible+1]=item end
+                        if not p.onlySelected then visible[#visible+1]=item end
                     end
                 end
+                if p.onlySelected then
+                    for _,item in ipairs(p.items) do if p.selected[item.key] then visible[#visible+1]=item end end
+                end
                 SortItems(visible,p.sort or "name")
+                p.displayKeys={};for _,item in ipairs(visible) do p.displayKeys[item.key]=true end
             end
-			for key in pairs(p.selected) do total=total+1; if not p.matchKeys[key] then hidden=hidden+1 end end
+            local selectedVisible=0
+            for key,selected in pairs(p.selected) do if selected then
+                total=total+1;if not p.matchKeys[key] then hidden=hidden+1 end
+                if p.displayKeys[key] then selectedVisible=selectedVisible+1 end
+            end end
 			p.visible=visible
 			local pages=math.max(1,math.ceil(#visible/25)); p.page=math.min(p.page,pages)
 			local pageStart=(p.page-1)*25
@@ -236,7 +251,13 @@ function AzerMind.ShowItemPicker()
 					row.icon=row:CreateTexture(nil,"ARTWORK"); row.icon:SetSize(36,36); row.icon:SetPoint("TOPLEFT",30,-2)
 					row.title=T.Label(row,"",76,-1); T.Type(row.title,"mainLabel"); row.title:SetWidth(526); row.title:SetJustifyH("LEFT"); row.title:SetWordWrap(false)
 					row.detail=T.Label(row,"",76,-25); row.detail:SetWidth(526); row.detail:SetJustifyH("LEFT"); row.detail:SetWordWrap(false); T.Color(row.detail,"SetTextColor","muted")
-					row:SetScript("OnClick",function(self) p.selected[self.item.key]=self:GetChecked() or nil; if p.onlySelected then p.query=nil end; Render() end)
+					row:SetScript("OnClick",function(self)
+                        p.actionMessage=nil
+                        if self:GetChecked() and not p.selected[self.item.key] and SelectionCount()>=100 then
+                            self:SetChecked(false);p.actionMessage="Maximum 100 selected items. Remove an item before adding another."
+                        else p.selected[self.item.key]=self:GetChecked() or nil end
+                        if p.onlySelected then p.query=nil end; Render()
+                    end)
 					local function ShowItemTooltip(self)
                         self.auctionExpanded = IsShiftKeyDown and IsShiftKeyDown() or false
 						GameTooltip:SetOwner(self,"ANCHOR_RIGHT"); GameTooltip:ClearLines()
@@ -274,7 +295,7 @@ function AzerMind.ShowItemPicker()
             scroll:UpdateScrollChildRect()
             if scroll.ScrollBar then scroll.ScrollBar:SetShown(pageCount*48>scroll:GetHeight()) end
 			p.pageLabel:SetText((#visible>0 and (pageStart+1) or 0).."-"..(pageStart+pageCount).." / "..#visible.." | Page "..p.page.." / "..pages)
-            p.resultCount:SetText(#visible.." results")
+            p.resultCount:SetText(#visible..(p.onlySelected and " selected" or " results"))
 			p.previous:SetEnabled(p.page>1); p.next:SetEnabled(p.page<pages)
 			p.summary:SetText(total.." selected · "..hidden.." outside current filters"..(#visible==0 and " · No matching items" or ""))
 			p.insert:SetText("Add to message ("..total..")"); p.insert:SetEnabled(total>0 and total<=100)
@@ -282,24 +303,35 @@ function AzerMind.ShowItemPicker()
             if RenderTree then RenderTree() end
             if p.UpdateFilterSummary then p.UpdateFilterSummary() end
             if p.empty then
-                p.empty:SetShown(#visible==0); p.searchAll:SetShown(#visible==0 and p.category~="all")
+                p.empty:SetShown(#visible==0); p.searchAll:SetShown(#visible==0 and not p.onlySelected and p.category~="all")
                 p.emptyReset:SetShown(#visible==0)
-                p.empty:SetText(p.catalogError or ((p.minLevel and p.maxLevel and p.minLevel>p.maxLevel) and "Min level must not exceed Max level." or (p.unknownMetadata>0 and "No matching items with known metadata. Some item data is unavailable." or "No matching items. Broaden your category or clear a filter.")))
+                p.emptyReset:SetText(p.onlySelected and "Return to results" or "Reset filters")
+                p.empty:SetText(p.onlySelected and "No selected items. Return to results to choose items." or p.catalogError or ((p.minLevel and p.maxLevel and p.minLevel>p.maxLevel) and "Min level must not exceed Max level." or (p.unknownMetadata>0 and "No matching items with known metadata. Some item data is unavailable." or "No matching items. Broaden your category or clear a filter.")))
             end
 			p.locationSelector.value=p.location; p.locationSelector:SetText((p.mode=="catalog" and "Owned in: " or "Location: ")..p.location)
 			if p.mode=="catalog" then
 				p.bank:SetText(total>100 and "Choose up to 100 items per attachment." or "Rarity and slot filters require client-cached data.")
 			end
+            if p.selectAll then
+                p.selectAll:SetEnabled(#visible>0 and total+#visible-selectedVisible<=100)
+                local additions=0
+                for index=pageStart+1,pageStart+pageCount do if not p.selected[visible[index].key] then additions=additions+1 end end
+                p.selectPage:SetEnabled(pageCount>0 and total+additions<=100)
+            end
+            p.selectedToggle:SetValue(p.onlySelected)
+            p.selectedToggle.caption:SetText("Review selected ("..total..")")
             if p.unknownMetadata>0 then p.bank:SetText(p.unknownMetadata.." items have missing data for the current filters.") end
             if total>100 then p.bank:SetText("Choose up to 100 items per attachment.") end
             if p.minLevel and p.maxLevel and p.minLevel>p.maxLevel then p.bank:SetText("Required level: Min must not exceed Max.") end
+            if p.actionMessage then p.bank:SetText(p.actionMessage) end
+            if p.removedSelections and p.removedSelections>0 then p.bank:SetText(p.removedSelections.." unavailable items removed from the selection.") end
             p.rendering=false
 		end
 		p.previous=Button("Previous",92,256,-508,function() p.page=math.max(1,p.page-1); scroll:SetVerticalScroll(0); Render() end)
 		p.next=Button("Next",92,796,-508,function() p.page=p.page+1; scroll:SetVerticalScroll(0); Render() end)
 		scroll:HookScript("OnVerticalScroll",function() if p.insert then Render() end end)
         function p.SetLocation(value)
-            p.location=value; p.query=nil; scroll:SetVerticalScroll(0); Render()
+            BrowseMode(); p.actionMessage=nil; p.location=value; p.query=nil; scroll:SetVerticalScroll(0); Render()
         end
         p.locationSelector=T.Selector(p,"Location",200,{{key="All",label="All"},{key="Equipped",label="Equipped"},{key="Bags",label="Bags"},{key="Bank",label="Bank"}},"All",function(option) p.SetLocation(option.key) end)
         p.locationSelector:SetPoint("TOPLEFT",32,-128); p.locationSelector:SetValue("All","All")
@@ -312,7 +344,7 @@ function AzerMind.ShowItemPicker()
         p.categoryScroll=categoryScroll
         function p.SelectCategory(key)
             if not p.categoryNodes[key] then return end
-            p.category=key; p.expanded[key]=true; p.query=nil; scroll:SetVerticalScroll(0); GameTooltip:Hide(); Render()
+            BrowseMode(); p.actionMessage=nil; p.category=key; p.expanded[key]=true; p.query=nil; scroll:SetVerticalScroll(0); GameTooltip:Hide(); Render()
         end
         function p.ToggleCategory(key) p.expanded[key]=not p.expanded[key]; GameTooltip:Hide(); RenderTree() end
         RenderTree=function()
@@ -339,18 +371,18 @@ function AzerMind.ShowItemPicker()
             end
             for index=#entries+1,#p.categoryRows do p.categoryRows[index]:Hide() end
             p.treeEntries=entries; categoryContent:SetHeight(math.max(1,#entries*34)); categoryScroll:UpdateScrollChildRect()
-            if p.breadcrumb then p.breadcrumb:SetText(p.categoryNodes[p.category] and (p.categoryNodes[p.category].parent and ((p.categoryNodes[p.categoryNodes[p.category].parent].label).." > ") or "")..p.categoryNodes[p.category].label or "All items") end
+            if p.breadcrumb then p.breadcrumb:SetText(p.onlySelected and "Selected items" or p.categoryNodes[p.category] and (p.categoryNodes[p.category].parent and ((p.categoryNodes[p.categoryNodes[p.category].parent].label).." > ") or "")..p.categoryNodes[p.category].label or "All items") end
         end
 
 		local rarityOptions={{key=-1,label="All"}}
         for value=0,7 do rarityOptions[#rarityOptions+1]={key=value,label=_G["ITEM_QUALITY"..value.."_DESC"] or tostring(value)} end
-        p.raritySelector=T.Selector(p,"Rarity",140,rarityOptions,-1,function(option) p.rarity=option.key; Render() end)
+        p.raritySelector=T.Selector(p,"Rarity",140,rarityOptions,-1,function(option) BrowseMode();p.rarity=option.key;p.actionMessage=nil;Render() end)
         p.raritySelector:SetPoint("TOPLEFT",256,-180); p.raritySelector:SetValue(-1,"All")
 		T.Label(p,"Min level",580,-160); T.Label(p,"Max level",656,-160)
         local function LevelInput(name,x,field)
             local input=T.SearchField(p,name,64,"")
             input.label:SetText(""); input:SetPoint("TOPLEFT",x,-180); input:SetNumeric(true); input:SetMaxLetters(3)
-            input:SetScript("OnTextChanged",function(self) p[field]=tonumber(self:GetText()); Render() end)
+            input:SetScript("OnTextChanged",function(self) if not p.changingFilters then BrowseMode() end;p[field]=tonumber(self:GetText());p.actionMessage=nil;Render() end)
             return input
         end
         p.minInput=LevelInput("AzerMindItemMinLevel",580,"minLevel")
@@ -364,10 +396,10 @@ function AzerMind.ShowItemPicker()
 		local slots={"All","INVTYPE_HEAD","INVTYPE_NECK","INVTYPE_SHOULDER","INVTYPE_CHEST","INVTYPE_WAIST","INVTYPE_LEGS","INVTYPE_FEET","INVTYPE_WRIST","INVTYPE_HAND","INVTYPE_FINGER","INVTYPE_TRINKET","INVTYPE_CLOAK","INVTYPE_WEAPON","INVTYPE_2HWEAPON","INVTYPE_WEAPONMAINHAND","INVTYPE_WEAPONOFFHAND","INVTYPE_HOLDABLE","INVTYPE_SHIELD","INVTYPE_RANGED","INVTYPE_RANGEDRIGHT"}
         local slotOptions={}
         for _,value in ipairs(slots) do slotOptions[#slotOptions+1]={key=value,label=_G[value] or value} end
-        p.slotSelector=T.Selector(p,"Slot",156,slotOptions,"All",function(option) p.slot=option.key; Render() end)
+        p.slotSelector=T.Selector(p,"Slot",156,slotOptions,"All",function(option) BrowseMode();p.slot=option.key;p.actionMessage=nil;Render() end)
         p.slotSelector:SetPoint("TOPLEFT",408,-180)
         function p.ClearFilter(key)
-            p.changingFilters=true
+            BrowseMode();p.actionMessage=nil;p.changingFilters=true
             if key=="search" or key=="all" then search:SetText("") end
             if key=="category" or key=="all" then p.category="all" end
             if key=="location" or key=="all" then p.location="All" end
@@ -395,24 +427,51 @@ function AzerMind.ShowItemPicker()
         p.empty=T.Label(scroll,"",16,-26);p.empty:SetWidth(570);p.empty:SetJustifyH("LEFT");p.empty:SetWordWrap(true)
         p.searchAll=T.Button(scroll,"Search all items",180,30,function() p.ClearFilter("category") end)
         p.searchAll:SetPoint("TOPLEFT",scroll,"TOPLEFT",16,-88)
-        p.emptyReset=T.Button(scroll,"Reset filters",160,30,function() p.ClearFilter("all") end)
+        p.emptyReset=T.Button(scroll,"Reset filters",160,30,function() if p.onlySelected then p.SetReview(false) else p.ClearFilter("all") end end)
         p.emptyReset:SetPoint("TOPLEFT",scroll,"TOPLEFT",208,-88)
         search:SetScript("OnEnterPressed",function() p.query=nil;Render() end)
 
 		local divider=p:CreateTexture(nil,"BORDER")
 		divider:SetHeight(1); divider:SetPoint("TOPLEFT",p,"TOPLEFT",32,-542); divider:SetPoint("TOPRIGHT",p,"TOPRIGHT",-32,-542)
 		T.Color(divider,"SetColorTexture","border")
-		Button("Select all results",144,160,-556,function() for _,item in ipairs(p.visible) do p.selected[item.key]=true end; if p.onlySelected then p.query=nil end; Render() end)
-		Button("Clear selection",128,316,-556,function() p.selected={}; if p.onlySelected then p.query=nil end; Render() end)
-		p.selectedToggle=T.Toggle(p,"Show selected only",210,false,function(value) p.onlySelected=value; p.query=nil; Render() end); p.selectedToggle:SetPoint("TOPLEFT",460,-556)
-		Button("Select page",116,32,-556,function()
-			-- Replace the selection so items hidden by the current filters cannot
-			-- accidentally ride along when selecting only equipment, bags, etc.
-			for i=(p.page-1)*25+1,math.min(p.page*25,#p.visible) do p.selected[p.visible[i].key]=true end
-			Render()
-		end)
+        function p.SetReview(value)
+            p.actionMessage=nil
+            local restore
+            if value and not p.onlySelected then p.reviewState={page=p.page,scroll=scroll:GetVerticalScroll()}
+            elseif not value and p.onlySelected then restore=p.reviewState;p.reviewState=nil end
+            p.onlySelected=not not value;p.query=nil;Render()
+            if restore then
+                p.page=restore.page;Render()
+                scroll:SetVerticalScroll(math.min(restore.scroll,math.max(0,math.min(25,#p.visible-(p.page-1)*25)*48-scroll:GetHeight())))
+                Render()
+            end
+        end
+        local function SelectRange(first,last)
+            local total=SelectionCount();local additions={}
+            for index=first,last do
+                local item=p.visible[index]
+                if item and not p.selected[item.key] then
+                    additions[#additions+1]=item.key
+                    if total+#additions>100 then p.actionMessage="Selection exceeds 100 items. Narrow the filters or select a smaller page.";Render();return end
+                end
+            end
+            for _,key in ipairs(additions) do p.selected[key]=true end
+            p.actionMessage=nil;if p.onlySelected then p.query=nil end;Render()
+        end
+        p.selectAll=Button("Select all results",144,160,-556,function() SelectRange(1,#p.visible) end)
+        p.selectAll:SetMotionScriptsWhileDisabled(true)
+        T.Tooltip(p.selectAll,"Select all results","Adds all matches. Limited to 100 items; narrow the filters if this action is disabled.")
+        Button("Clear selection",128,316,-556,function() p.selected={};p.actionMessage=nil;if p.onlySelected then p.query=nil end;Render() end)
+        p.selectedToggle=T.Toggle(p,"Review selected",210,false,function(value) p.SetReview(value) end)
+        p.selectedToggle:SetPoint("TOPLEFT",460,-556)
+        T.Tooltip(p.selectedToggle,"Review selected","Shows every selected item, including those outside current filters. Uncheck to return to your previous results.")
+        p.selectPage=Button("Select page",116,32,-556,function() SelectRange((p.page-1)*25+1,math.min(p.page*25,#p.visible)) end)
+        p.selectPage:SetMotionScriptsWhileDisabled(true)
+        T.Tooltip(p.selectPage,"Select page","Adds this page to your selection. No existing selections are replaced. Maximum 100 items.")
+
 		p.insert=Button("Add to message (0)",192,696,-600,function()
-			local chosen=0; for _ in pairs(p.selected) do chosen=chosen+1 end
+            p.Refresh()
+            local chosen=SelectionCount()
             if chosen==0 then return end
 			if chosen>100 then p.summary:SetText("Choose up to 100 items per attachment."); return end
 			local lines={"--- Selected inventory items ---", "Inventory snapshot: "..date("%Y-%m-%d %H:%M")..". Only Equipped entries are worn."}
@@ -432,13 +491,15 @@ function AzerMind.ShowItemPicker()
 		end)
 		T.Primary(p.insert)
 		T.Tooltip(p.insert,"Add items to message","Maximum 100 items per attachment. Adds to the draft; nothing is sent yet.")
-        p:SetScript("OnHide",T.CloseChoiceMenu)
+        p:SetScript("OnHide",function() T.CloseChoiceMenu();search:ClearFocus();GameTooltip:Hide();for _,row in ipairs(p.rows) do row:SetScript("OnUpdate",nil) end end)
 		Button("Cancel",100,584,-600,function() p:Hide() end)
 		search:SetScript("OnTextChanged",function()
+            if not p.changingFilters then BrowseMode() end;p.actionMessage=nil
 			p.searchVersion=(p.searchVersion or 0)+1; local version=p.searchVersion
 			C_Timer.After(0.15,function() if p.insert and p:IsShown() and p.searchVersion==version then scroll:SetVerticalScroll(0); Render() end end)
 		end)
 		p.Refresh=function(metadataOnly)
+            p.actionMessage=nil
 			T.SourceSelection(p,p.mode)
             p.selectedToggle:SetValue(p.onlySelected)
             p.query=nil; p.baseQuery=nil
@@ -465,11 +526,10 @@ function AzerMind.ShowItemPicker()
 			p.version:SetText(p.mode=="catalog" and (AzerMindCatalog and ("Forever snapshot · "..AzerMindCatalog.manifest.source.." "..AzerMindCatalog.manifest.version) or "Catalog unavailable") or "Equipment, bags and last bank snapshot")
             p.removedSelections=T.ReconcileSelection(p.selected,p.items,"key")
 			Render()
-            if p.removedSelections>0 then p.summary:SetText(p.removedSelections.." unavailable selections removed. "..p.summary:GetText()) end
 			if err then p.summary:SetText(err) end
 		end
 	end
-	if picker.chatId~=chat.id then picker.selections={}; picker.selectionSource=nil; picker.selected={} end
+	if picker.chatId~=chat.id then picker.selections={}; picker.selectionSource=nil; picker.selected={};picker.onlySelected=false;picker.reviewState=nil end
     picker.chatId=chat.id; picker:Show(); picker.Refresh()
 end
 local events=CreateFrame("Frame")

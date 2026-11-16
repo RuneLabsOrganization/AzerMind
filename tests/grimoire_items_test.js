@@ -125,3 +125,92 @@ test('two thousand items page and scroll through bounded rows without rescanning
   assert(P.pageLabel:GetText():find('26-50 / 2000',1,true),'page range incorrect')
  `);
 });
+
+test('review includes hidden selections and restores browsing filters and source-specific selections',t=>{
+ const vm=fixture(t);
+ vm.run(`
+  P.selected['bags:1']=true;P.selected['bags:3']=true;P.SelectCategory('sub:4:1')
+  assert(#P.visible==1,'browse category wrong')
+  P.SetReview(true)
+  assert(#P.visible==2 and P.category=='sub:4:1','review discarded hidden selection or filter')
+  P.SetReview(false)
+  assert(#P.visible==1 and P.visible[1].id==1,'return did not restore filtering')
+  AzerMind.CatalogItemList=function() return {{key='catalog:999',id=999,name='Catalog item',link='item:999',count=1,location='Catalog',kind='',subtype='',slot=''}} end
+  for _,b in ipairs(P.children) do if b.text=='Item database' then b.scripts.OnClick() end end
+  assert(next(P.selected)==nil,'owned selection leaked into catalog')
+  P.selected['catalog:999']=true
+  for _,b in ipairs(P.children) do if b.text=='My items' then b.scripts.OnClick() end end
+  assert(P.selected['bags:1'] and P.selected['bags:3'] and not P.selected['catalog:999'],'source selections were lost or mixed')
+ `);
+});
+
+test('bulk and individual selection enforce the hundred-item limit atomically',t=>{
+ const vm=fixture(t);
+ vm.run(`
+  LARGE={};for i=1,150 do LARGE[i]={key='bags:'..i,id=i,name=string.format('Item %04d',i),link='item:'..i,
+   count=1,location='Bags',kind='',subtype='',slot=''} end
+  AzerMind.OwnedItems=function() return LARGE end;P.Refresh()
+  P.selectAll.scripts.OnClick();assert(next(P.selected)==nil,'bulk action partially selected too many items')
+  for i=1,100 do P.selected['bags:'..i]=true end
+  P.Refresh();P.page=5;P.next.scripts.OnClick();P.previous.scripts.OnClick()
+  local row=P.rows[1];assert(row.item.id==101,'limit fixture wrong page')
+  row.checked=true;row.scripts.OnClick(row,'LeftButton')
+  assert(not P.selected['bags:101'] and not row:GetChecked(),'individual limit not enforced')
+  assert(not P.selectAll:IsEnabled() and not P.selectPage:IsEnabled(),'oversized bulk action remained enabled')
+  assert(AzerMindDB.chats[1].pendingId==nil,'selection sent a message')
+ `);
+});
+
+test('attachment refresh keeps modifiers, quantities, bank provenance and auction credit without sending',t=>{
+ const vm=fixture(t);
+ vm.run(`
+  ITEMS[1].link='|cff00ff00|Hitem:1:0:0:0:0:0:-19:42|h[Azure Cloth Hat]|h|r'
+  ITEMS[1].count=7
+  ITEMS[7]={key='bank:1:modified',id=1,name='Bank Hat',link='|Hitem:1:0:0:0:0:0:-20:99|h[Bank Hat]|h',
+    count=3,location='Bank',kind='',subtype='Cloth',slot='',classID=4,subclassID=1}
+  local key=(GetRealmName() or '')..':'..(UnitName('player') or '')
+  AzerMindItemsDB={[key]={updated='2026-11-16 01:00'}}
+  AHledgerAPI={GetPrice=function() return {median=12345,market='fixture-market',snapshot=true} end}
+  P.selected['bags:1']=true;P.selected['bank:1:modified']=true
+  AzerMind.AppendQuestDraft=function(text,chat) ATTACHED=text;ATTACH_CHAT=chat;return true end
+  P.insert.scripts.OnClick()
+  assert(ATTACHED:find('item:1:0:0:0:0:0:-19:42',1,true),'bag modifiers lost')
+  assert(ATTACHED:find('item:1:0:0:0:0:0:-20:99',1,true),'bank variant collapsed into bags')
+  assert(ATTACHED:find('×7',1,true) and ATTACHED:find('×3',1,true),'refreshed quantities lost')
+  assert(ATTACHED:find('bank snapshot: 2026-11-16 01:00',1,true),'bank age lost')
+  assert(ATTACHED:find('Prices from AHledger (ahledger.com)',1,true),'auction provenance lost')
+  assert(ATTACH_CHAT==P.chatId and AzerMindDB.chats[1].pendingId==nil,'attachment sent or changed chat')
+ `);
+});
+
+test('review restores the page and scroll, then reports items removed by an inventory refresh',t=>{
+ const vm=fixture(t);
+ vm.run(`
+  LARGE={};for i=1,80 do LARGE[i]={key='bags:'..i,id=i,name=string.format('Item %04d',i),link='item:'..i,
+   count=1,location='Bags',kind='',subtype='',slot=''} end
+  AzerMind.OwnedItems=function() return LARGE end;P.Refresh()
+  P.selected['bags:1']=true;P.selected['bags:70']=true
+  P.next.scripts.OnClick();P.scroll:SetVerticalScroll(144)
+  P.SetReview(true);assert(#P.visible==2,'review selection incomplete')
+  P.SetReview(false)
+  assert(P.page==2 and P.scroll:GetVerticalScroll()==144 and P.rows[1].item.id==29,'browse position was not restored')
+  table.remove(LARGE,70);P.Refresh()
+  assert(not P.selected['bags:70'] and P.selected['bags:1'] and P.removedSelections==1,'refresh did not reconcile exact keys')
+  assert(P.bank:GetText():find('removed',1,true),'unavailable selection not reported')
+ `);
+});
+
+test('attachments reject changed conversations and oversized payloads without changing the draft',t=>{
+ const vm=fixture(t);
+ vm.run(`
+  P.selected['bags:1']=true
+  AzerMind.NewChat();P.insert.scripts.OnClick()
+  assert(P.summary:GetText():find('Conversation changed',1,true),'attachment silently changed conversations')
+  assert(AzerMindInput:GetText()=='' and AzerMindDB.chats[2].pendingId==nil,'attachment leaked into new conversation')
+  AzerMind.ShowItemPicker();P.selected['bags:1']=true
+  AzerMind.AuctionItemDetails=function() return string.rep('x',37000) end
+  AzerMind.AppendQuestDraft=function() error('oversized draft must not be inserted') end
+  P.insert.scripts.OnClick()
+  assert(P.summary:GetText():find('too large',1,true) and P:IsShown(),'byte limit did not preserve picker')
+ `);
+});

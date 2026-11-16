@@ -159,10 +159,10 @@ Visual check: names, quantities, badges and focus remain legible with real items
 
 ### 5. Selection and attachments
 
-- [ ] Group additive selection actions and enforce the 100-item limit clearly.
-- [ ] Add Review selected without losing the browsing state.
-- [ ] Make hidden/unavailable selections visible and keep sources independent.
-- [ ] Preserve draft-only attachment, original chat binding and byte limit.
+- [x] Group additive selection actions and enforce the 100-item limit clearly.
+- [x] Add Review selected without losing the browsing state.
+- [x] Make hidden/unavailable selections visible and keep sources independent.
+- [x] Preserve draft-only attachment, original chat binding and byte limit.
 
 Automated checks: select across pages/categories; reset and source switch; review
 hidden selections; inventory refresh/removal; limit boundaries; unchanged bank,
@@ -200,3 +200,5 @@ Iteration 2: framed 920x660 layout, location selector, reserved category/result 
 Iteration 3: four focused item regressions and three compatibility checks passed. Added word/ID/link search, category recovery, independently clearable filters, contextual empty states and filtered tree counts. Metadata refreshes are coalesced and invalidate the cache; scrolling/collapsing does not rescan items. Client visual review remains pending.
 
 Iteration 4: six item regressions plus four auction regressions passed. Stable Name/Rarity/Level/Location sorting, readable rows, independent matched/page counters and source inspection are checked. The 2,000-item fixture keeps at most six result rows and does not rescan filters on scrolling. Client visual review remains pending.
+
+Iteration 5: eleven item regressions plus four auction regressions passed, as did four existing inventory/catalog checks. Review includes hidden selections and restores browse position. Bulk selection is atomic at 100; attachment refresh preserves exact payloads, updated quantities, bank age, auction attribution and original-chat/byte guards. Client visual review remains pending.
