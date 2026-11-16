@@ -1,6 +1,6 @@
 # Items browser redesign and iteration plan
 
-Status: proposed implementation sequence; product code unchanged.
+Status: implementation in progress; previously completed UI work is preserved.
 Starting point: clean `main` at `08ee4e0`.
 
 ## Goal
@@ -113,10 +113,10 @@ Numeric or pasted-link searches must not replace the selected item's payload.
 
 ### 1. Category tree and matching
 
-- [ ] Define stable family/subtype records and fallback labels.
-- [ ] Implement select-parent, select-child and independent expansion.
-- [ ] Replace the duplicate Subtype selector with a breadcrumb.
-- [ ] Check all represented item families, unknown metadata and accessory slots.
+- [x] Define stable family/subtype records and fallback labels.
+- [x] Implement select-parent, select-child and independent expansion.
+- [x] Replace the duplicate Subtype selector with a breadcrumb.
+- [x] Check all represented item families, unknown metadata and accessory slots.
 
 Automated checks: Armor -> Cloth excludes Leather; parent includes all its
 children; equal subclass IDs under different classes never collide; expand/
@@ -192,3 +192,5 @@ chat interception or protected gameplay automation belongs to this work.
 Plan review: approved. The review confirmed source-selection preservation,
 category semantics and stage checks; stable identity/quantity reconciliation and
 search-versus-payload separation were made explicit above.
+
+Iteration 1: category-tree regression and four existing inventory/catalog regressions passed. Lua checks passed. Client visual review remains pending.

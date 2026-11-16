@@ -58,17 +58,60 @@ function AzerMind.OwnedItems()
 	table.sort(result, function(a,b) if a.name == b.name then return a.key < b.key end; return a.name < b.name end)
 	return result
 end
-local categories = {
-	{"All items"}, {"Armor",4}, {"  Cloth",4,1}, {"  Leather",4,2}, {"  Mail",4,3}, {"  Plate",4,4}, {"  Shields",4,6},
-	{"Weapons",2}, {"Accessories","accessories"}, {"Consumables",0}, {"Materials",7}, {"Recipes",9}, {"Containers",1}, {"Gems",3}, {"Reagents",5}, {"Projectiles",6}, {"Quivers",11}, {"Keys",13}, {"Quest items",12}, {"Other","other"},
+local categoryFamilies = {
+    {"all","All items"},{"class:4","Armor",4},{"class:2","Weapons",2},
+    {"accessories","Accessories"},{"class:0","Consumables",0},{"class:7","Materials",7},
+    {"class:9","Recipes",9},{"class:1","Containers",1},{"class:3","Gems",3},
+    {"class:5","Reagents",5},{"class:6","Projectiles",6},{"class:11","Quivers",11},
+    {"class:13","Keys",13},{"class:12","Quest items",12},{"class:15","Miscellaneous",15},
+    {"other","Unknown / Other"},
 }
+local armorNames = {[0]="Miscellaneous armor",[1]="Cloth",[2]="Leather",[3]="Mail",[4]="Plate",[6]="Shields"}
+local weaponNames = {[0]="One-handed axes",[1]="Two-handed axes",[2]="Bows",[3]="Guns",[4]="One-handed maces",
+    [5]="Two-handed maces",[6]="Polearms",[7]="One-handed swords",[8]="Two-handed swords",[10]="Staves",
+    [13]="Fist weapons",[15]="Daggers",[16]="Thrown",[18]="Crossbows",[19]="Wands",[20]="Fishing poles"}
 local accessorySlots = {INVTYPE_NECK=true, INVTYPE_FINGER=true, INVTYPE_TRINKET=true, INVTYPE_CLOAK=true}
-local function Category(item, category)
-	local class, sub = category[2], category[3]
-	if not class then return true end
-	if class == "accessories" then return accessorySlots[item.slot] or false end
-	if class == "other" then return not ({[0]=true,[2]=true,[4]=true,[7]=true,[9]=true,[1]=true,[3]=true,[5]=true,[6]=true,[11]=true,[13]=true,[12]=true})[item.classID] end
-	return item.classID == class and (not sub or item.subclassID == sub)
+local function Category(item, key)
+    if key=="all" then return true end
+    if key=="accessories" then return accessorySlots[item.slot] or false end
+    if key=="other" then return type(item.classID)~="number" or item.classID<0 end
+    local class=tonumber(key:match("^class:(%d+)$"))
+    if class then return item.classID==class end
+    local parent,sub=key:match("^sub:(%d+):(%d+)$")
+    if parent then return item.classID==tonumber(parent) and item.subclassID==tonumber(sub) end
+    parent=tonumber(key:match("^unknown:(%d+)$"))
+    return parent and item.classID==parent and type(item.subclassID)~="number" or false
+end
+local function ItemCategoryTree(items)
+    local roots,nodes,observed={},{},{}
+    for _,family in ipairs(categoryFamilies) do
+        local node={key=family[1],label=family[2],classID=family[3],children={}}
+        roots[#roots+1]=node; nodes[node.key]=node
+    end
+    for _,item in ipairs(items) do
+        if type(item.classID)=="number" and item.classID>=0 then
+            local key="class:"..item.classID
+            if not nodes[key] then
+                local node={key=key,label=Read(GetItemClassInfo,item.classID) or ("Item class "..item.classID),classID=item.classID,children={}}
+                roots[#roots+1]=node; nodes[key]=node
+            end
+            observed[item.classID]=observed[item.classID] or {}
+            observed[item.classID][type(item.subclassID)=="number" and item.subclassID or "unknown"]=item.subtype or ""
+        end
+    end
+    for class,children in pairs(observed) do
+        local parent=nodes["class:"..class]
+        for sub,name in pairs(children) do
+            local key=sub=="unknown" and ("unknown:"..class) or ("sub:"..class..":"..sub)
+            local fallback=class==4 and armorNames[sub] or class==2 and weaponNames[sub]
+            local label=sub=="unknown" and "Unknown subtype" or Read(GetItemSubClassInfo,class,sub)
+                or (type(name)=="string" and name~="" and name) or fallback or ("Subclass "..sub)
+            local node={key=key,label=label,parent=parent.key,children={}}
+            parent.children[#parent.children+1]=node; nodes[key]=node
+        end
+        table.sort(parent.children,function(a,b) if a.label==b.label then return a.key<b.key end; return a.label<b.label end)
+    end
+    return roots,nodes
 end
 function AzerMind.ShowItemPicker()
 	local chat = AzerMind.SettingsState(); if not chat then return end
@@ -90,7 +133,7 @@ function AzerMind.ShowItemPicker()
 		local search=T.SearchField(p,nil,708,"Search by name, type, or item ID")
 		search:SetPoint("TOPLEFT",26,-110)
 		search:SetMaxLetters(100); search:SetScript("OnEscapePressed",function(self) self:ClearFocus() end)
-		p.rows,p.selected,p.category,p.location,p.rarity,p.level,p.slot={}, {},1,"All",-1,false,"All"
+		p.rows,p.selected,p.category,p.location,p.rarity,p.level,p.slot={}, {},"all","All",-1,false,"All"
 		local scroll=CreateFrame("ScrollFrame","AzerMindItemPickerScroll",p,"UIPanelScrollFrameTemplate")
 		-- Reserve the entire selection toolbar below the viewport. Previously
 		-- the viewport extended through it, so rows covered its buttons.
@@ -102,6 +145,8 @@ function AzerMind.ShowItemPicker()
 		p.page=1
 		p.pageLabel=T.Label(p,"",302,-498)
 		local categoryButtons, locationButtons={},{}
+        p.expanded={}; p.categoryRows={}; p.categoryCounts={}
+        local RenderTree
 		local function Render()
 			if p.rendering then return end
 			p.rendering=true
@@ -112,11 +157,10 @@ function AzerMind.ShowItemPicker()
 				p.query=query; p.page=1; visible={}; p.matchKeys={}; scroll:SetVerticalScroll(0)
 			for _,item in ipairs(p.items or {}) do
 				if p.slot~="All" then AzerMind.EnrichCatalogItem(item) end
-                local match=(p.location=="All" or item.location==p.location or (p.mode=="catalog" and p.ownership[item.id] and p.ownership[item.id][p.location])) and Category(item,categories[p.category])
+                local match=(p.location=="All" or item.location==p.location or (p.mode=="catalog" and p.ownership[item.id] and p.ownership[item.id][p.location])) and Category(item,p.category)
 					and (p.rarity==-1 or item.quality==p.rarity)
                     and (not p.minLevel or (item.level and item.level>=p.minLevel))
                     and (not p.maxLevel or (item.level and item.level<=p.maxLevel))
-                    and (not p.subclass or (tostring(item.classID)..":"..tostring(item.subclassID))==p.subclass)
 					and (p.slot=="All" or item.slot==p.slot) and (not p.onlySelected or p.selected[item.key])
 					and (item.name.." "..item.kind.." "..item.subtype.." "..(item.id or "")):lower():find(filter,1,true)
 				if match then visible[#visible+1]=item; p.matchKeys[item.key]=true end
@@ -175,7 +219,7 @@ function AzerMind.ShowItemPicker()
 			p.summary:SetText(total.." selected · "..hidden.." hidden by filters · "..#visible.." shown"..(#visible==0 and " · No matching items" or ""))
 			p.insert:SetText("Add to message ("..total..")"); p.insert:SetEnabled(total>0 and total<=100)
 			local cache=Cache(); p.bank:SetText(cache.updated and ("Bank · "..(bankOpen and "Live" or "Last updated "..cache.updated)) or "Open your bank to load its items.")
-			for i,b in ipairs(categoryButtons) do T.Selected(b,p.category==i) end
+            if RenderTree then RenderTree() end
 			for name,b in pairs(locationButtons) do T.Selected(b,p.location==name) end
 			if p.mode=="catalog" then
 				p.bank:SetText(total>100 and "Choose up to 100 items per attachment." or "Rarity and slot filters require client-cached data.")
@@ -196,11 +240,38 @@ function AzerMind.ShowItemPicker()
 		end
 		local categoryScroll=CreateFrame("ScrollFrame","AzerMindItemCategoryScroll",p,"UIPanelScrollFrameTemplate")
         categoryScroll:SetPoint("TOPLEFT",20,-224); categoryScroll:SetSize(146,258)
-        local categoryContent=CreateFrame("Frame",nil,categoryScroll); categoryContent:SetSize(132,#categories*24); categoryScroll:SetScrollChild(categoryContent)
-        for i,category in ipairs(categories) do
-            categoryButtons[i]=Button(category[1],132,0,-(i-1)*24,function() p.category=i; p.subclass=nil; p.subtypeSelector:SetValue("all","All"); scroll:SetVerticalScroll(0); Render() end)
-			categoryButtons[i]:SetParent(categoryContent); categoryButtons[i]:ClearAllPoints(); categoryButtons[i]:SetPoint("TOPLEFT",0,-(i-1)*24); categoryButtons[i]:SetHeight(22)
-		end
+        local categoryContent=CreateFrame("Frame",nil,categoryScroll); categoryContent:SetSize(132,1); categoryScroll:SetScrollChild(categoryContent)
+        p.categoryScroll=categoryScroll
+        function p.SelectCategory(key)
+            if not p.categoryNodes[key] then return end
+            p.category=key; p.expanded[key]=true; p.query=nil; scroll:SetVerticalScroll(0); GameTooltip:Hide(); Render()
+        end
+        function p.ToggleCategory(key) p.expanded[key]=not p.expanded[key]; GameTooltip:Hide(); RenderTree() end
+        RenderTree=function()
+            local entries={}
+            for _,node in ipairs(p.categoryRoots or {}) do
+                entries[#entries+1]=node
+                if p.expanded[node.key] then for _,child in ipairs(node.children) do entries[#entries+1]=child end end
+            end
+            for index,node in ipairs(entries) do
+                local row=p.categoryRows[index]
+                if not row then
+                    row=CreateFrame("Frame",nil,categoryContent); row:SetSize(132,28)
+                    row.select=T.Button(row,"",108,26,function() p.SelectCategory(row.node.key) end,"LEFT")
+                    row.select:SetPoint("TOPLEFT",24,0)
+                    row.toggle=T.Button(row,"+",22,26,function() p.ToggleCategory(row.node.key) end)
+                    row.toggle:SetPoint("TOPLEFT",0,0); p.categoryRows[index]=row
+                end
+                row.node=node; row:ClearAllPoints(); row:SetPoint("TOPLEFT",0,-(index-1)*28)
+                row.select:SetText((node.parent and "  " or "")..node.label)
+                row.toggle:SetShown(#node.children>0); row.toggle:SetText(p.expanded[node.key] and "-" or "+")
+                T.Selected(row.select,p.category==node.key); row:Show()
+            end
+            for index=#entries+1,#p.categoryRows do p.categoryRows[index]:Hide() end
+            p.treeEntries=entries; categoryContent:SetHeight(math.max(1,#entries*28)); categoryScroll:UpdateScrollChildRect()
+            if p.breadcrumb then p.breadcrumb:SetText(p.categoryNodes[p.category] and p.categoryNodes[p.category].label or "All items") end
+        end
+
 		local rarityOptions={{key=-1,label="All"}}
         for value=0,7 do rarityOptions[#rarityOptions+1]={key=value,label=_G["ITEM_QUALITY"..value.."_DESC"] or tostring(value)} end
         p.raritySelector=T.Selector(p,"Rarity",150,rarityOptions,-1,function(option) p.rarity=option.key; Render() end)
@@ -214,29 +285,17 @@ function AzerMind.ShowItemPicker()
         end
         p.minInput=LevelInput("AzerMindItemMinLevel",504,"minLevel")
         p.maxInput=LevelInput("AzerMindItemMaxLevel",628,"maxLevel")
-        p.subtypeSelector=T.Selector(p,"Subtype",164,function()
-            local options={{key="all",label="All"}}; local seen={}
-            for _,item in ipairs(p.items or {}) do
-                local key=tostring(item.classID)..":"..tostring(item.subclassID)
-                if Category(item,categories[p.category]) and item.subclassID and not seen[key] then
-                    seen[key]=true
-                    local subtype=item.subtype~="" and item.subtype or ("Subclass "..item.subclassID)
-                    options[#options+1]={key=key,label=(p.category==1 and item.kind~="" and (item.kind.." > ") or "")..subtype}
-                end
-            end
-            table.sort(options,function(a,b) return tostring(a.key)<tostring(b.key) end)
-            return options
-        end,"all",function(option) p.subclass=option.key~="all" and option.key or nil; Render() end)
-        p.subtypeSelector:SetPoint("TOPLEFT",20,-488)
+        p.breadcrumb=T.Label(p,"All items",20,-494); p.breadcrumb:SetWidth(164); p.breadcrumb:SetJustifyH("LEFT")
+
 		local slots={"All","INVTYPE_HEAD","INVTYPE_NECK","INVTYPE_SHOULDER","INVTYPE_CHEST","INVTYPE_WAIST","INVTYPE_LEGS","INVTYPE_FEET","INVTYPE_WRIST","INVTYPE_HAND","INVTYPE_FINGER","INVTYPE_TRINKET","INVTYPE_CLOAK","INVTYPE_WEAPON","INVTYPE_2HWEAPON","INVTYPE_WEAPONMAINHAND","INVTYPE_WEAPONOFFHAND","INVTYPE_HOLDABLE","INVTYPE_SHIELD","INVTYPE_RANGED","INVTYPE_RANGEDRIGHT"}
         local slotOptions={}
         for _,value in ipairs(slots) do slotOptions[#slotOptions+1]={key=value,label=_G[value] or value} end
         p.slotSelector=T.Selector(p,"Slot",164,slotOptions,"All",function(option) p.slot=option.key; Render() end)
         p.slotSelector:SetPoint("TOPLEFT",320,-184)
 		Button("Reset filters",112,452,-148,function()
-			p.location="All"; p.category=1; p.rarity=-1; p.slot="All"; p.level=false; p.onlySelected=false
+			p.location="All"; p.category="all"; p.rarity=-1; p.slot="All"; p.level=false; p.onlySelected=false
 			p.raritySelector:SetValue(-1,"All"); p.slotSelector:SetValue("All")
-			p.minLevel=nil; p.maxLevel=nil; p.minInput:SetText(""); p.maxInput:SetText(""); p.subclass=nil; p.subtypeSelector:SetValue("all","All"); p.selectedToggle:SetValue(false)
+			p.minLevel=nil; p.maxLevel=nil; p.minInput:SetText(""); p.maxInput:SetText(""); p.subclass=nil; p.selectedToggle:SetValue(false)
 			search:SetText(""); p.query=nil; Render()
 		end)
 		local divider=p:CreateTexture(nil,"BORDER")
@@ -285,6 +344,15 @@ function AzerMind.ShowItemPicker()
 			local err
 			if p.mode=="catalog" then p.items,err=AzerMind.CatalogItemList() else p.items=AzerMind.OwnedItems() end
 			p.items=p.items or {}
+            for _,item in ipairs(p.items) do
+                if item.classID==nil or (p.mode=="catalog" and (item.slot or "")=="") then
+                    local _,_,_,slot,_,class,sub=Read(C_Item and C_Item.GetItemInfoInstant or GetItemInfoInstant,item.link or item.id)
+                    item.classID=item.classID or class; item.subclassID=item.subclassID or sub
+                    if slot and slot~="" then item.slot=slot end
+                end
+            end
+            p.categoryRoots,p.categoryNodes=ItemCategoryTree(p.items)
+            if not p.categoryNodes[p.category] then p.category="all" end
 			if p.lastMode~=p.mode then scroll:SetVerticalScroll(0); p.lastMode=p.mode end
 			T.Selected(tab,p.mode=="owned"); T.Selected(db,p.mode=="catalog")
 			p.ownership={}
