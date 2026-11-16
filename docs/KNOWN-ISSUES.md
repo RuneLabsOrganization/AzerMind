@@ -23,3 +23,18 @@ As of 2026-11-12, both Windows reader fixes are in an open pull request. The cha
 A separate open pull request refreshes the pixel strip scale after the game window is resized. [Window resize fix](https://github.com/mateusmaaia/AzerMind-wow/pull/6)
 
 To apply the Windows reader fix, update to a build containing PR #5 and restart the bridge. For the resize fix, also install the addon files from a build containing PR #6 and run `/reload`. Until the PRs are merged, updating the default branch alone does not include these fixes. A successful `/reload` fallback does not verify the pixel transport: confirm a new request reaches `(pixel) ... starting` and its reply appears without another reload.
+
+## Native chat commands blocked as an AzerMind action
+
+An older AzerMind build replaced Blizzard chat editboxes' `SendText`,
+`SendMessage` and `ProcessChatType` to redirect `/r` to the agent. Normal player
+commands also passed through those addon functions, creating an unsafe path into
+protected command dispatch. WoW may offer to disable the addon when it blocks
+such an action. This does not require a literal `TargetUnit` call in AzerMind.
+
+The fix removes those replacements. `/r` now stays the normal player-whisper
+reply; use `/ai <text>`, the addon input or `[reply]` to answer the agent.
+Update the addon and fully restart WoW to clear the old wrappers, then enable
+AzerMind. Chats and settings do not need to be reset. Automated regression checks
+that native method identities survive login; actual client confirmation is still
+required because the original warning had no captured stack.

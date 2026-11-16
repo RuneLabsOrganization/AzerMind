@@ -151,7 +151,7 @@ Selections can persist across pages and filters: check the selected count. Datab
 
 Right-click a quest link to mark an available objective or turn-in on the map. Multiple locations open a chooser. Missing coordinates are not guessed, and manual marks do not automatically track progress.
 
-Focus the input and shift-click supported items, spells, quests or links to attach them. Attachments expand to reference data when sent. Click a reply or `/azermind copy` to copy it. `/r` replies to the agent when it was the last sender; a player whisper restores normal reply behavior.
+Focus the input and shift-click supported items, spells, quests or links to attach them. Attachments expand to reference data when sent. Click a reply or `/azermind copy` to copy it. Use `/ai <text>` or the `[reply]` link to answer the agent. `/r` remains the game's normal whisper reply; AzerMind does not intercept native chat command handlers.
 
 ### Maps and macros
 

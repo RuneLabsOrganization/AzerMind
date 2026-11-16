@@ -2617,7 +2617,7 @@ function AzerMind.Render()
 			elseif not AzerMind.IsConnected() then
 				Place("system", "Not connected to the bridge. Start it (npm start in the azermind folder, or azermind in your project), then click Connect below.", "", true)
 			else
-				Place("system", "Click the box below and type to start. Shift-click an item, spell or quest to link it into your message. /azermind help lists the commands; /ai <text> and /r work from the game chat too.", "", true)
+				Place("system", "Click the box below and type to start. Shift-click an item, spell or quest to link it into your message. /azermind help lists the commands; /ai <text> works from the game chat too.", "", true)
 			end
 		end
 		for i = n + 1, #ui.bubbles do
@@ -2809,9 +2809,6 @@ function AzerMind.Notify(chat, text, agent, summary)
     if sound==nil then sound=3081 end
     if sound~=0 then pcall(PlaySound,sound,"Master") end
 	AzerMind.UpdateMini()
-	-- Until a real whisper arrives, /r replies to this chat.
-	run.lastMessenger = "agent"
-	run.lastReplyChat = chat.id
 	EchoToChat(chat, text, agent, summary)
 	if ui.frame and ui.frame:IsShown() and db.activeChat == chat.id then return end
 	if UIErrorsFrame then
@@ -2819,96 +2816,9 @@ function AzerMind.Notify(chat, text, agent, summary)
 	end
 end
 
--- /r goes to the agent when it was the last one to message you, exactly like
--- whisper reply, and the box shows a "To Codex [chat]:" header while you type.
---
--- The chat type underneath is left alone (a custom type would leak into chat
--- settings); instead the box remembers an agent target, the header is repainted
--- over the game's own, and the send entry points are intercepted. Any other chat
--- type, Tab, Esc or a cleared box drops the target again.
-local AGENT_R, AGENT_G, AGENT_B = 0.49, 0.78, 1.0
-
-local function PaintAgentHeader(eb, chat)
-	local header = _G[eb:GetName() .. "Header"]
-	local suffix = _G[eb:GetName() .. "HeaderSuffix"]
-	if not header then return end
-	eb.agentPainting = true
-	eb:UpdateHeader() -- lay out normally first, then repaint
-	eb.agentPainting = nil
-	header:SetWidth(0)
-	header:SetText("To " .. ChatAgentName(chat) .. " [" .. Display(chat.name) .. "]: ")
-	header:SetTextColor(AGENT_R, AGENT_G, AGENT_B)
-	if suffix then suffix:Hide() end
-	eb:SetTextInsets(15 + header:GetWidth(), 13, 0, 0)
-	eb:SetTextColor(AGENT_R, AGENT_G, AGENT_B)
-end
-
-local function SendBoxToAgent(eb)
-	local chat = FindChat(eb.agentTarget)
-	local text = Trim(eb:GetText() or "")
-	eb.agentTarget = nil
-	eb:ClearChat()
-	if chat and db.activeChat ~= chat.id then AzerMind.SwitchChat(chat.id) end
-	if text ~= "" then
-		AzerMind.Send(text)
-	else
-		AzerMind.Toggle(true)
-		if ui.input then ui.input:SetFocus() end
-	end
-end
-
-local function HookReplyCommand()
-	for i = 1, (NUM_CHAT_WINDOWS or 10) do
-		local eb = _G["ChatFrame" .. i .. "EditBox"]
-		if eb and eb.ProcessChatType and not eb.agentReplyHooked then
-			eb.agentReplyHooked = true
-
-			local origProcess = eb.ProcessChatType
-			eb.ProcessChatType = function(self, msg, index, send, ...)
-				if index ~= "REPLY" then
-					self.agentTarget = nil
-					return origProcess(self, msg, index, send, ...)
-				end
-				if not (db and run.lastMessenger == "agent") then
-					return origProcess(self, msg, index, send, ...)
-				end
-				local chat = FindChat(run.lastReplyChat) or ActiveChat()
-				if send == 1 then
-					self:SetText(msg or "")
-					self.agentTarget = chat and chat.id
-					SendBoxToAgent(self)
-					return true
-				end
-				self.agentTarget = chat and chat.id
-				self:SetText(msg or "")
-				if chat then PaintAgentHeader(self, chat) end
-				return true
-			end
-
-			-- Enter arrives here; nothing below us ever sees an agent-targeted box.
-			for _, name in ipairs({ "SendMessage", "SendText" }) do
-				local orig = eb[name]
-				if orig then
-					eb[name] = function(self, ...)
-						if self.agentTarget then
-							SendBoxToAgent(self)
-							return
-						end
-						return orig(self, ...)
-					end
-				end
-			end
-
-			-- Anything that repaints the header normally (Tab, /s, sticky reset) ends agent mode.
-			hooksecurefunc(eb, "UpdateHeader", function(self)
-				if not self.agentPainting then self.agentTarget = nil end
-			end)
-			hooksecurefunc(eb, "ClearChat", function(self)
-				self.agentTarget = nil
-			end)
-		end
-	end
-end
+-- Native chat methods must stay Blizzard-owned. Replacing SendText, SendMessage
+-- or ProcessChatType routes protected player slash commands through addon Lua.
+-- Use /ai or the [reply] link to answer an agent; /r remains the game's whisper.
 
 -- Clicks on our [reply] / [open] links in the chat frame.
 hooksecurefunc("SetItemRef", function(link)
@@ -3835,7 +3745,6 @@ local HELP = table.concat({
 	"/azermind mini                   collapse to the small bar (click the bar to expand)",
 	"/azermind hide                   hide the window completely",
 	"/ai <text>                         send <text> to the current chat straight from the game chat box (/azermind <text> too). A message that starts with a command word is still sent when the rest of the line doesn't fit that command",
-	"/r <text>                          replies to the agent when it was the last to message you (else normal whisper reply)",
 	"/azermind echo summary|full|short|off|<chars>   how much of each reply to print in the game chat (summary = the agent's closing TL;DR lines)",
 	"/azermind longchat on|off        let the game chat box take 4000 characters (for long /ai messages)",
 	"/azermind new [name]             start a new chat (its own agent session, like a new terminal)",
@@ -4110,16 +4019,11 @@ ev:RegisterEvent("ADDON_LOADED")
 ev:RegisterEvent("PLAYER_LOGIN")
 ev:RegisterEvent("PLAYER_REGEN_ENABLED")
 ev:RegisterEvent("UPDATE_MACROS")
-ev:RegisterEvent("CHAT_MSG_WHISPER")
-ev:RegisterEvent("CHAT_MSG_BN_WHISPER")
 ev:SetScript("OnEvent", function(self, event, arg1)
 	if event == "ADDON_LOADED" then
 		if arg1 == ADDON_NAME then
 			InitDB()
 		end
-	elseif event == "CHAT_MSG_WHISPER" or event == "CHAT_MSG_BN_WHISPER" then
-		-- A real person whispered: /r belongs to them again.
-		run.lastMessenger = "player"
 	elseif event == "PLAYER_LOGIN" then
 		if not db then InitDB() end
 		BuildUI()
@@ -4155,7 +4059,6 @@ ev:SetScript("OnEvent", function(self, event, arg1)
 		AzerMind.ArmAutoRefresh()
 		AzerMind.UpdateDot()
 		if db.settings.longchat then ApplyLongChat() end
-		HookReplyCommand()
 		C_Timer.NewTicker(TICK_SECONDS, Tick)
 		C_Timer.NewTicker(0.75, function()
 			-- Window/display changes can settle after their event. Recalibrate even

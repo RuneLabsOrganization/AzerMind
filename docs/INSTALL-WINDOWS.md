@@ -145,7 +145,7 @@ git pull
 node setup.js
 ```
 
-`setup.js` copies your chats and settings from `WoWClaude.lua` to `AzerMind.lua` in the game's SavedVariables, removes the old `WoWClaude` addon and its 200 `WoWClaude_S###` slot folders (two addons would both answer `/ai` and `/r`), rewrites the addon paths in `bridge\config.json`, moves the Claude settings under `agents.claude` and adds the `codex` and `grok` blocks, then builds the new slot pool. Quit and relaunch the game, and enable *AzerMind* on the AddOns screen. Your agent sessions carry on, since the bridge keeps them per chat.
+`setup.js` copies your chats and settings from `WoWClaude.lua` to `AzerMind.lua` in the game's SavedVariables, removes the old `WoWClaude` addon and its 200 `WoWClaude_S###` slot folders (two addons would both answer `/ai`, and the old addon may still intercept `/r`), rewrites the addon paths in `bridge\config.json`, moves the Claude settings under `agents.claude` and adds the `codex` and `grok` blocks, then builds the new slot pool. Quit and relaunch the game, and enable *AzerMind* on the AddOns screen. Your agent sessions carry on, since the bridge keeps them per chat.
 
 Then, if you had installed the command: `npm unlink -g wow-claude`, and `npm link` again from the repo folder (rename the folder to `azermind` first if you like; `npm link` follows whatever it is called). A hotkey set with `/wow-claude bind` needs `/azermind bind <key>` again, since it pointed at the old addon's button. `/wow-claude` itself keeps working as an alias of `/azermind`.
 

@@ -14,6 +14,27 @@ const { lua, lauxlib, lualib, to_luastring, to_jsstring } = fengari;
 const ADDON = path.join(__dirname, '..', 'addon', 'AzerMind');
 const CELLS_PER_ROW = 200;
 
+test('login leaves native chat command methods untouched so protected player commands keep their dispatch path', () => {
+  const vm = newVM();
+  vm.run(`
+    ChatFrame1EditBox=CreateFrame("EditBox","ChatFrame1EditBox",UIParent)
+    NATIVE_PROCESS=function() return "native process" end
+    NATIVE_SEND=function(self) NATIVE_COMMAND=self:GetText(); return "native send" end
+    ChatFrame1EditBox.ProcessChatType=NATIVE_PROCESS
+    ChatFrame1EditBox.SendText=NATIVE_SEND
+    ChatFrame1EditBox.SendMessage=NATIVE_SEND
+    ChatFrame1EditBox.UpdateHeader=function() end
+    ChatFrame1EditBox.ClearChat=function() end
+  `);
+  login(vm);
+  assert.equal(vm.evaluate('ChatFrame1EditBox.ProcessChatType == NATIVE_PROCESS'), 'true');
+  assert.equal(vm.evaluate('ChatFrame1EditBox.SendText == NATIVE_SEND'), 'true');
+  assert.equal(vm.evaluate('ChatFrame1EditBox.SendMessage == NATIVE_SEND'), 'true');
+  vm.run('ChatFrame1EditBox:SetText("/target Testchar"); NATIVE_RESULT=ChatFrame1EditBox:SendText()');
+  assert.equal(vm.evaluate('NATIVE_RESULT'), 'native send');
+  assert.equal(vm.evaluate('NATIVE_COMMAND'), '/target Testchar');
+});
+
 test('send resolves action bar evidence from the raw question before expanding links',()=>{
   const vm=newVM(); login(vm); connect(vm);
   vm.run(`
