@@ -102,3 +102,78 @@ test('character Save and Cancel preserve category, consent and persisted values'
   assert(options.spells and enabled==ORIGINAL,'Save changed consent or lost values')
  `);
 });
+
+test('guide list edits and removals remain drafts until Save, and Cancel restores exact variants',t=>{
+ const vm=boot(t);
+ vm.run(`
+  ORIGINAL='https://example.com/build?variant=affliction%2C7'
+  AzerMind.SaveGuideReferences(ORIGINAL)
+  AzerMind.ShowGuideSettings();P=AzerMindGuideSettings
+  assert(P.rows[1].input:GetText()==ORIGINAL,'existing link changed')
+  assert(P.rows[1].mouseEnabled,'row surface cannot receive clicks')
+  P.rows[1].input:ClearFocus();P.rows[1].scripts.OnMouseDown()
+  assert(P.rows[1].input:HasFocus(),'row click did not focus its link')
+  P.add.scripts.OnClick()
+  P.rows[2].input:SetText('https://second.example/guide')
+  P.rows[2].input.scripts.OnTextChanged(P.rows[2].input)
+  assert(AzerMind.GuideReferences()==ORIGINAL,'editing saved without confirmation')
+  P.rows[1].remove.scripts.OnClick()
+  assert(P.rows[1].input:GetText()=='https://second.example/guide','removal did not reindex')
+  assert(AzerMind.GuideReferences()==ORIGINAL,'removal changed persisted data')
+  P.cancel.scripts.OnClick()
+  assert(#P.entries==1 and P.rows[1].input:GetText()==ORIGINAL and not P.dirty,'Cancel lost original variant')
+  P.add.scripts.OnClick();P.rows[2].input:SetText('https://second.example/guide')
+  P.rows[2].input.scripts.OnTextChanged(P.rows[2].input);P.save.scripts.OnClick()
+  assert(AzerMind.GuideReferences()==ORIGINAL..string.char(10)..'https://second.example/guide','Save lost order or variant')
+  P.rows[2].remove.scripts.OnClick();P.rows[1].remove.scripts.OnClick();P.save.scripts.OnClick()
+  assert(AzerMind.GuideReferences()=='' and #P.entries==1,'empty list is not usable')
+ `);
+});
+
+test('guide row validation shows errors and blocks invalid, duplicate and oversized lists',t=>{
+ const vm=boot(t);
+ vm.run(`
+  AzerMind.ShowGuideSettings();P=AzerMindGuideSettings
+  function EDIT(index,value) P.rows[index].input:SetText(value);P.rows[index].input.scripts.OnTextChanged(P.rows[index].input) end
+  EDIT(1,'javascript:bad')
+  assert(P.rows[1].error and not P.save:IsEnabled(),'invalid URL not marked')
+  EDIT(1,'https://example.com/guide');P.add.scripts.OnClick();EDIT(2,'https://example.com/guide')
+  assert(P.rows[2].error=='This guide is already in the list.' and not P.save:IsEnabled(),'duplicate not marked')
+  EDIT(2,'https://example.com/guide?variant=other')
+  assert(not P.rows[2].error and P.save:IsEnabled(),'distinct variant treated as duplicate')
+  EDIT(2,'https://example.com/'..string.rep('a',2048))
+  assert(P.rows[2].error and not P.save:IsEnabled(),'oversized link was silently truncated')
+  P.cancel.scripts.OnClick()
+  for i=1,5 do
+   if i>1 then P.add.scripts.OnClick() end
+   EDIT(i,'https://example.com/'..i..string.rep('a',1900))
+  end
+  assert(not P.save:IsEnabled() and P.status:GetText():find('8000',1,true),'combined byte budget not enforced')
+  assert(AzerMind.GuideReferences()=='','invalid draft changed saved guides')
+ `);
+});
+
+test('guide plus/minus stays bounded at twenty rows and keyboard focus scrolls with the row',t=>{
+ const vm=boot(t);
+ vm.run(`
+  local urls={};for i=1,20 do urls[i]='https://example.com/guide-'..i end
+  AzerMind.SaveGuideReferences(table.concat(urls,string.char(10)))
+  AzerMind.ShowGuideSettings();P=AzerMindGuideSettings
+  assert(#P.entries==20 and not P.add:IsEnabled(),'twenty row limit missing')
+  P.add.scripts.OnClick();assert(#P.entries==20,'plus exceeded maximum')
+  P.rows[20].remove.scripts.OnClick()
+  assert(#P.entries==19 and P.add:IsEnabled(),'minus did not free a row')
+  P.rows[19].input.scripts.OnEnterPressed()
+  assert(#P.entries==20 and P.rows[20].input:HasFocus(),'Enter did not focus a new row')
+  assert(P.scroll:GetVerticalScroll()>0,'new row stays outside viewport')
+  IsShiftKeyDown=function() return true end
+  P.rows[20].input.scripts.OnTabPressed()
+  assert(P.rows[19].input:HasFocus(),'Shift-Tab did not move backward')
+  IsShiftKeyDown=function() return false end
+  P.rows[19].input.scripts.OnTabPressed()
+  assert(P.rows[20].input:HasFocus(),'Tab did not move forward')
+  P.rows[20].input.scripts.OnEscapePressed(P.rows[20].input)
+  assert(not P.rows[20].input:HasFocus(),'Escape kept input captured')
+  assert(#P.rows==20,'row controls grew without bound')
+ `);
+});

@@ -133,7 +133,12 @@ Models come from local discovery, configured catalogs and bundled compatibility 
 
 Under **Settings > Character**, choose game/client, identity, realm/guild, zone, coordinates, money/XP, talent points and ranks, professions, skills, learned spells, quest IDs and equipped items. Quest sharing includes the active log and character completion IDs reported by the client's API. Ready-to-turn-in quests remain active; completed history means already delivered. Missing APIs and partial history are labeled, and absence from the list does not establish quest eligibility. Use presets and **Preview**, then **Save**. You can disable automatic sharing; manual attachments still form part of your message. Talent sharing includes tree totals, purchased ranks and unspent points when the client provides them; pending edits and partial data are identified. Pet abilities are not collected. Missing data and size limits are identified. Disabling sharing does not erase previously sent information.
 
-Under **Settings > Guide references**, enter one URL per line, up to 20, and save. Links apply to future messages in all conversations independently of character sharing. Agents can read them only if their tools and permissions allow it.
+Under **Settings > Guide references**, use **+ Add guide** to add links and the
+**−** beside a row to remove it. Edit each URL directly; invalid and duplicate
+links are marked before saving. **Save** applies the list and **Cancel** restores
+your saved links. Up to 20 guides apply to future messages in all conversations,
+independently of character sharing. Agents can read them only if their tools and
+permissions allow it. Enter advances or adds a row; Tab/Shift+Tab move between links.
 
 These references inform the AI's answers. For example, link a leveling build for your class and ask what talent to take at your current level. The agent is instructed to read the relevant guide, check the game version, class, specialization and build variant, and follow that progression consistently. It uses shared character facts and your corrections to adapt the advice; recommended talents are not proof of your actual talent ranks. Wowhead Forever remains a reference for quest, item and spell facts, without overriding your chosen build.
 

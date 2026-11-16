@@ -73,7 +73,8 @@ local function EnsureSettingsShell()
             p:Show(); SettingsMessage(p.activePage,"Saving settings... wait for confirmation."); return
         end
         local active=p.activePage
-        if active and active.input then active.input:ClearFocus() end
+        if active and active.ClearFocus then active.ClearFocus()
+        elseif active and active.input then active.input:ClearFocus() end
         if active and active.customModel then active.customModel:ClearFocus() end
         Theme.CloseChoiceMenu(); dimmer:Hide()
     end)
@@ -99,6 +100,7 @@ local function ShowSettingsPage(page)
     if not CanOpenSettings(page.settingsKey) then return end
     local shell=EnsureSettingsShell()
     Theme.CloseChoiceMenu()
+    GameTooltip:Hide()
     shell.switching=true
     for _,other in pairs(settingsPages) do if other~=page then other:Hide() end end
     shell.activePage=page; shell.switching=false
@@ -365,53 +367,142 @@ function AzerMind.ShowContextSettings()
 	p.Refresh(); ShowSettingsPage(p)
 end
 
--- One URL per line keeps adding and removing references straightforward.
+-- Editable rows; persistence remains newline-delimited for existing installations.
 local guidePanel
 function AzerMind.ShowGuideSettings()
     if not CanOpenSettings("guides") then return end
-	if not guidePanel then
-		local p = CreateFrame("Frame", "AzerMindGuideSettings", AzerMindFrame, "BackdropTemplate")
-		guidePanel = p
-		p:SetSize(600, 430); p:SetPoint("CENTER", AzerMindFrame, "CENTER")
-		p:SetFrameStrata("FULLSCREEN_DIALOG"); p:SetFrameLevel(AzerMindFrame:GetFrameLevel() + 130)
-		p:EnableMouse(true); p:SetClampedToScreen(true); PrepareSettingsPage(p,"guides")
-		Label(p, "Guide references", 20, -20, "GameFontNormalLarge")
-		local help = Label(p, "Applies to: All conversations. One guide URL per line (up to 20). Independent of character sharing.", 20, -54)
-		help:SetWidth(552); help:SetJustifyH("LEFT")
-		local scroll = CreateFrame("ScrollFrame", nil, p, "UIPanelScrollFrameTemplate")
-		scroll:SetSize(530, 210); scroll:SetPoint("TOPLEFT", 24, -124)
-		p.count=Label(p,"",24,-96)
-		Theme.Panel(scroll,"frame-input",8); Theme.Scrollbar(scroll)
-		local input = CreateFrame("EditBox", nil, scroll)
-		input:SetMultiLine(true); input:SetAutoFocus(false); input:SetFontObject("ChatFontNormal")
-		input:SetWidth(524); input:SetHeight(230); input:SetMaxLetters(10000)
-		input:EnableMouse(true); scroll:EnableMouse(true)
-		-- The empty area below the text must focus the editor too.
-		scroll:SetScript("OnMouseDown", function(_, button) if button == "LeftButton" then input:SetFocus() end end)
-		input:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-		scroll:SetScrollChild(input); p.input = input
-		input:SetScript("OnTextChanged",function()
-			local count=0; for line in (input:GetText().."\n"):gmatch("([^\n]*)\n") do if line:find("%S") then count=count+1 end end
-			p.count:SetText(count.." / 20 guide links"); p.dirty=input:GetText()~=AzerMind.GuideReferences()
-			if p.save then p.save:SetEnabled(p.dirty) end
-		end)
-		p:SetScript("OnHide",function() p.input:ClearFocus() end)
-		p.status = Label(p, "Changes apply to future messages. Previously shared links remain in chat history.", 20, -354)
-		p.status:SetWidth(560); p.status:SetJustifyH("LEFT")
-		Button(p, "Cancel", 100, 346, -390, function()
-            p.input:SetText(AzerMind.GuideReferences()); p.dirty=false; p.input:ClearFocus(); p.save:Disable(); p.status:SetText("Changes canceled.")
+    if not guidePanel then
+        local p=CreateFrame("Frame","AzerMindGuideSettings",AzerMindFrame,"BackdropTemplate")
+        guidePanel=p; p:EnableMouse(true); PrepareSettingsPage(p,"guides")
+        Label(p,"Guide references",24,-12,"GameFontNormalLarge")
+        local help=Label(p,"Add the guides you want the AI to consult. Applies to all conversations.",24,-54)
+        help:SetWidth(572); help:SetJustifyH("LEFT")
+        p.count=Label(p,"",24,-94)
+        local scroll=CreateFrame("ScrollFrame","AzerMindGuideListScroll",p,"UIPanelScrollFrameTemplate")
+        scroll:SetPoint("TOPLEFT",p,"TOPLEFT",24,-132); scroll:SetSize(540,260)
+        Theme.Scrollbar(scroll); p.scroll=scroll
+        local content=CreateFrame("Frame",nil,scroll); content:SetSize(532,1); scroll:SetScrollChild(content)
+        p.rows={}; p.entries={}; p.focusedIndex=1
+        p.status=Label(p,"",24,-408); p.status:SetWidth(572); p.status:SetJustifyH("LEFT")
+        local function TrimURL(value) return (value or ""):match("^%s*(.-)%s*$") end
+        local function Serialize()
+            local result={}
+            for _,value in ipairs(p.entries) do local url=TrimURL(value); if url~="" then result[#result+1]=url end end
+            return table.concat(result,"\n")
+        end
+        function p.ClearFocus()
+            for _,row in ipairs(p.rows) do row.input:ClearFocus() end
+        end
+        local function FocusRow(index)
+            local row=p.rows[index]; if not row or not row:IsShown() then return end
+            p.ClearFocus(); p.focusedIndex=index; row.input:SetFocus()
+            local top,bottom=(index-1)*80,index*80
+            local offset=scroll:GetVerticalScroll()
+            if top<offset then offset=top elseif bottom>offset+scroll:GetHeight() then offset=bottom-scroll:GetHeight() end
+            scroll:SetVerticalScroll(math.max(0,math.min(offset,math.max(0,content:GetHeight()-scroll:GetHeight()))))
+        end
+        local function Validate()
+            local seen,count,invalid={},0,false
+            for index,value in ipairs(p.entries) do
+                local url=TrimURL(value); local row=p.rows[index]; local message
+                if url~="" then
+                    count=count+1
+                    if not url:match("^https?://[^%s/]+") or url:find("[%s|%c]") then message="Use a complete http:// or https:// link."
+                    elseif #url>2048 then message="This link exceeds 2048 bytes."
+                    elseif seen[url] then message="This guide is already in the list." end
+                    seen[url]=true
+                end
+                local host=url:match("^https?://([^/%?#]+)")
+                row.title:SetText(index..". "..(host or "New guide"))
+                row.feedback:SetText(message or (url=="" and "Paste a guide link" or ""))
+                Theme.Color(row.feedback,"SetTextColor",message and "accent" or "muted")
+                row.error=message; invalid=invalid or message~=nil
+            end
+            local text=Serialize()
+            if #text>8000 then invalid=true end
+            p.dirty=text~=AzerMind.GuideReferences()
+            p.count:SetText(count.." / 20 guide links")
+            p.add:SetEnabled(#p.entries<20)
+            p.save:SetEnabled(p.dirty and not invalid)
+            if #text>8000 then p.status:SetText("The guide list exceeds 8000 bytes. Shorten or remove a link.")
+            elseif invalid then p.status:SetText("Check the marked links before saving.")
+            elseif p.dirty then p.status:SetText("Unsaved changes. Save to apply; Cancel restores your saved guides.")
+            elseif count==0 then p.status:SetText("Paste a link in the first row. Use + Add guide for more.")
+            else p.status:SetText("Used for future messages. Previously shared links remain in chat history.") end
+        end
+        local Render
+        local function AddGuide()
+            if #p.entries>=20 then return end
+            GameTooltip:Hide()
+            p.entries[#p.entries+1]=""; Render(); FocusRow(#p.entries)
+        end
+        Render=function()
+            p.rendering=true
+            for index,value in ipairs(p.entries) do
+                local row=p.rows[index]
+                if not row then
+                    row=CreateFrame("Frame",nil,content,"BackdropTemplate"); row:SetSize(532,76); row:EnableMouse(true)
+                    Theme.Panel(row,"frame-input",6)
+                    row.title=Label(row,"",12,-4); row.title:SetWidth(496); row.title:SetWordWrap(false)
+                    row.input=CreateFrame("EditBox",nil,row,"InputBoxTemplate")
+                    row.input:SetSize(452,30); row.input:SetPoint("TOPLEFT",row,"TOPLEFT",16,-26)
+                    row.input:SetAutoFocus(false); row.input:SetMultiLine(false); row.input:SetMaxLetters(10000)
+                    Theme.Type(row.input,"body"); Theme.Color(row.input,"SetTextColor","text")
+                    row.feedback=Label(row,"",12,-60); row.feedback:SetWidth(504); row.feedback:SetWordWrap(false)
+                    row.remove=Theme.Button(row,"-",36,30,function()
+                        local removed=row.index
+                        GameTooltip:Hide()
+                        p.ClearFocus(); table.remove(p.entries,removed)
+                        if #p.entries==0 then p.entries[1]="" end
+                        Render(); FocusRow(math.min(removed,#p.entries))
+                    end)
+                    row.remove:SetPoint("TOPLEFT",row,"TOPLEFT",484,-26)
+                    Theme.Tooltip(row.remove,function() return "Remove guide "..row.index end,"Removal takes effect when you save. Cancel restores saved links.")
+                    Theme.Tooltip(row.input,function() return TrimURL(row.input:GetText()) end)
+                    row:SetScript("OnMouseDown",function() FocusRow(row.index) end)
+                    row.input:SetScript("OnTextChanged",function(self)
+                        if p.rendering then return end
+                        self=self or row.input; p.entries[row.index]=self:GetText() or ""; Validate()
+                    end)
+                    row.input:SetScript("OnEditFocusGained",function() p.focusedIndex=row.index end)
+                    row.input:SetScript("OnEscapePressed",function(self) (self or row.input):ClearFocus() end)
+                    row.input:SetScript("OnEnterPressed",function()
+                        if row.index<#p.entries then FocusRow(row.index+1) else AddGuide() end
+                    end)
+                    row.input:SetScript("OnTabPressed",function()
+                        local step=IsShiftKeyDown and IsShiftKeyDown() and -1 or 1
+                        FocusRow(((row.index-1+step)%#p.entries)+1)
+                    end)
+                    p.rows[index]=row
+                end
+                row.index=index; row:ClearAllPoints(); row:SetPoint("TOPLEFT",content,"TOPLEFT",0,-(index-1)*80)
+                row.input:SetText(value); row:Show()
+            end
+            for index=#p.entries+1,#p.rows do p.rows[index].input:ClearFocus(); p.rows[index]:Hide() end
+            content:SetHeight(math.max(1,#p.entries*80))
+            scroll:UpdateScrollChildRect()
+            p.input=p.rows[1].input -- first-row alias for existing focus/diagnostic callers
+            p.rendering=false; Validate()
+        end
+        p.add=Button(p,"+ Add guide",154,442,-82,AddGuide); p.add:SetHeight(32)
+        p.cancel=Button(p,"Cancel",100,368,-466,function() p.Load(); p.status:SetText("Changes canceled.") end)
+        p.save=Button(p,"Save",120,480,-466,function()
+            local ok,message=AzerMind.SaveGuideReferences(Serialize())
+            if ok then p.Load(); p.status:SetText("Saved. Applies to future messages in all conversations.")
+            else p.status:SetText(message) end
         end)
-		p.save=Button(p, "Save", 120, 454, -390, function()
-			local ok, message = AzerMind.SaveGuideReferences(p.input:GetText())
-			if ok then p.input:SetText(AzerMind.GuideReferences()); p.dirty=false; p.save:Disable(); p.status:SetText("Saved. Applies to future messages in all conversations.") else p.status:SetText(message) end
-		end)
-		Button(p, "X", 26, 554, -14, function() p.input:ClearFocus(); p:Hide() end)
-	end
-	if guidePanel.dirty then ShowSettingsPage(guidePanel); guidePanel.input:SetFocus(); return end
-	guidePanel.input:SetText(AzerMind.GuideReferences())
-	guidePanel.input:GetScript("OnTextChanged")(); guidePanel.dirty=false; guidePanel.save:Disable()
-	guidePanel.status:SetText("Changes apply to future messages. Previously shared links remain in chat history.")
-	ShowSettingsPage(guidePanel); guidePanel.input:SetFocus()
+        function p.Load()
+            p.ClearFocus(); p.entries={}
+            for url in AzerMind.GuideReferences():gmatch("[^\n]+") do p.entries[#p.entries+1]=url end
+            if #p.entries==0 then p.entries[1]="" end
+            p.focusedIndex=1; scroll:SetVerticalScroll(0); Render()
+        end
+        p:SetScript("OnHide",p.ClearFocus)
+        p.FocusRow=FocusRow
+    end
+    local p=guidePanel
+    if not p.dirty then p.Load() end
+    ShowSettingsPage(p); p.FocusRow(p.focusedIndex or 1)
 end
 
 function AzerMind.ShowNotificationSettings()

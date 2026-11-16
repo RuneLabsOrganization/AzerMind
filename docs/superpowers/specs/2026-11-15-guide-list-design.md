@@ -18,3 +18,10 @@ Test add/remove/edit/save/cancel, empty and full lists, URLs with variants,
 invalid and duplicate rows, draft preservation and keyboard focus/scrolling.
 Use the existing shared settings frame and Grimoire components. Dismiss stale
 tooltips when changing categories. Validate and install with backup.
+
+Implemented: editable rows, bounded reuse of twenty row controls, inline errors,
+save/cancel preservation, domain labels and keyboard focus/scroll navigation.
+The complete suite passed 319 tests and all 16 Windows codec cases. Final
+mouse/tooltip/scroll-range refinements passed all eight settings regressions and
+Lua declaration/syntax checks. Existing guide variant tests also passed. Actual
+in-game visual review remains separate; reload Settings.lua to inspect the result.
