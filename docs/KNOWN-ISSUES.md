@@ -6,11 +6,15 @@ The bridge keeps its last snapshot across restarts. A saved snapshot is not proo
 
 Before the context synchronization fix, character data was sent only at login, Connect, or with a question. An unrelated presence heartbeat could also acknowledge a fragmented hello prematurely, removing its context before the bridge received it.
 
-The fix sends changed, consent-filtered context every 30 seconds while connected, outside combat, and with the transport idle. These records update the local snapshot without starting an AI request. Message-specific acknowledgements replace the presence shortcut. Retries and out-of-order delivery cannot overwrite a newer snapshot.
+Character context is captured when a question is sent and during login/Connect. There is no periodic character-context scan or background transmission while playing. These controls update the local snapshot without starting an AI request. Message-specific acknowledgements replace the presence shortcut. Retries and out-of-order delivery cannot overwrite a newer snapshot.
 
-Install both the addon and bridge changes, restart the bridge, then use `/reload` when safe. No new addon folder is required. In `bridge/bridge.log`, look for `game context updated` and `context sync #...`. In `bridge/state.json`, `context.at` is the last content change, `context.receivedAt` is its last accepted receipt, and `contextReceipt` identifies the last accepted context-bearing message. Unchanged snapshots are not resent; these timestamps can therefore remain stable while the character is idle. An empty shared context clears `context`, while the receipt metadata remains for ordering.
+Install both the addon and bridge changes, restart the bridge, then use `/reload` when safe. No new addon folder is required. In `bridge/bridge.log`, look for `game context updated` when a question or login/Connect is received. In `bridge/state.json`, `context.at` is the last content change, `context.receivedAt` is its last accepted receipt, and `contextReceipt` identifies the last accepted context-bearing message. Unchanged snapshots are not resent; these timestamps can therefore remain stable while the character is idle. An empty shared context clears `context`, while the receipt metadata remains for ordering.
 
 This transport still requires the helper and a visible, unobstructed pixel strip. It does not read game memory or control gameplay. If the helper is stopped, the last saved snapshot remains historical until a new transmission arrives.
+
+### Colored pixels appear too often while playing
+
+An earlier version transmitted changed character context every 30 seconds, so ordinary gameplay repeatedly displayed the pixel strip. Automatic character-context synchronization is now disabled entirely. Fresh shared data accompanies user questions; login/Connect and explicitly changing sharing settings still use control handshakes. Install the updated existing `AzerMind.lua` and use `/reload` when safe. No bridge restart is needed. Between user actions, the saved context can be old; ask a new question or click Connect to refresh it.
 
 ## Sending message stalls on Windows
 

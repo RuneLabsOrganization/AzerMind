@@ -40,8 +40,6 @@ local POLL_TAIL = 60
 local TICK_SECONDS = 2
 local CONNECT_WAIT = 15 -- seconds the Connect button waits for the bridge before giving up
 local HELLO_POLL_SCHEDULE = { 5, 10, CONNECT_WAIT }
-local CONTEXT_SYNC_SECONDS, CONTEXT_SYNC_TIMEOUT = 30, 60
-local CONTEXT_POLL_SECONDS = 15
 local IDLE_POLL_SECONDS = 600 -- without the sound channel, spend one slot this often while idle to check the bridge
 local RS, US = "\30", "\31" -- record / unit separators in the strip payload
 
@@ -777,7 +775,7 @@ local function ApplyReplies(replies)
 	for _, r in ipairs(replies or {}) do
 		local outbound = run.outbound[r.id]
 		if outbound and outbound.hello and r.session == db.session
-			and r.status == (outbound.contextSync and "context-ack" or "hello-ack") then
+			and r.status == "hello-ack" then
 			MarkAcked(r.id)
 		end
 		if outbound and outbound.cancel and r.session == db.session and r.status == "cancel-ack" then MarkAcked(r.id) end
@@ -941,8 +939,6 @@ local function PollHello(now)
 	end
 end
 
-local SyncContext -- defined with the context builder below
-
 local function Tick()
 	if not db then return end
 	local now = GetTime()
@@ -989,21 +985,11 @@ local function Tick()
 				NotedBridge()
 			end
 		end
-		if rec.contextSync and not rec.acked and now - rec.sentAt < CONTEXT_SYNC_TIMEOUT
-			and now >= rec.nextPollAt and not AnyPending() and not InCombatLockdown() then
-			rec.nextPollAt = now + CONTEXT_POLL_SECONDS
-			-- Preserve the final reply slots for user initiated work; never request a reload.
-			if not run.slotsMissing and not run.slotsExhausted and FreeSlot(5) then TryLoadSlot("context") end
-		end
 		if rec.acked then
 			if rec.forget then db.forget[rec.forget] = nil end
 			run.outbound[id] = nil
 			changed = true
-		elseif rec.contextSync and now - rec.sentAt >= CONTEXT_SYNC_TIMEOUT then
-			run.outbound[id] = nil
-			run.nextContextSync = now + CONTEXT_SYNC_SECONDS
-			changed = true
-		elseif rec.hello and not rec.contextSync and now - rec.sentAt >= 20 then
+		elseif rec.hello and now - rec.sentAt >= 20 then
 			run.outbound[id] = nil
 			changed = true
 		elseif now - rec.sentAt >= STRIP_SECONDS then
@@ -1037,7 +1023,6 @@ local function Tick()
 		RefreshStrip()
 		AzerMind.UpdateStatus()
 	end
-	SyncContext(now)
 	if not AnyPending() then return end
 	local moved = false
 	for _, c in ipairs(db.chats) do
@@ -1482,24 +1467,6 @@ local function ContextToSend(room)
 	if not run.contextRefreshPending and ctx == (run.contextSent or "") then return nil end
 	if room and #ctx > room then return nil end
 	return ctx
-end
-
-SyncContext = function(now)
-	if not run.nextContextSync then run.nextContextSync = now + CONTEXT_SYNC_SECONDS; return end
-	if now < run.nextContextSync then return end
-	if (not db.settings.context and not run.contextRefreshPending) or not AzerMind.IsConnected() or AnyPending() or InCombatLockdown() then return end
-	for _, rec in pairs(run.outbound) do if not rec.acked then return end end
-	run.nextContextSync = now + CONTEXT_SYNC_SECONDS
-	local ctx = ContextToSend()
-	if ctx == nil then return end
-	db.lastSeq = db.lastSeq + 1
-	local id, c = db.lastSeq, ActiveChat()
-	-- The hello flag keeps older bridges from starting an AI job for this record.
-	run.outbound[id] = { chat = c and c.id or "", cwd = c and c.cwd or "", flags = "h;u",
-		name = c and c.name or "", text = "", ctx = ctx, sentAt = now, hello = true,
-		contextSync = true, contextRevision = run.contextRevision,
-		nextPollAt = now + CONTEXT_POLL_SECONDS, ackBlocked = CheckSignal("ack", id) }
-	RefreshStrip()
 end
 
 -- Read a link's tooltip off a hidden GameTooltip, one line per row.
