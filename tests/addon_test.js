@@ -1641,7 +1641,7 @@ test('instances browse bounded pages, filter and attach native links without sen
  assert.ok(vm.num('#AzerMindInstancePicker.rows')<=7);
  assert.ok(vm.num('#AzerMindInstancePicker.visible')>=38);
  const before=vm.num('AzerMindDB.lastSeq');
- vm.run('AzerMindInstanceSearch:SetText("Wailing"); AzerMindInstancePicker.Refresh(); AzerMindInstancePicker.rows[1].scripts.OnClick(AzerMindInstancePicker.rows[1],"LeftButton"); for _,b in ipairs(AzerMindInstancePicker.children) do if b.text and b.text:find("^Add to message") then b.scripts.OnClick() end end');
+ vm.run('AzerMindInstanceSearch:SetText("Wailing Caverns"); AzerMindInstancePicker.Refresh(); for _,row in ipairs(AzerMindInstancePicker.rows) do if row:IsShown() and row.record.name=="Wailing Caverns" then row.scripts.OnClick(row,"LeftButton") end end; AzerMindInstancePicker.attach.scripts.OnClick()');
  const draft=vm.evaluate('AzerMindInput:GetText()');
  assert.ok(draft.includes('|Hazermindinstance:')&&draft.includes('Wailing Caverns'));
  assert.equal(vm.num('AzerMindDB.lastSeq'),before);
@@ -1651,7 +1651,7 @@ test('instances browse bounded pages, filter and attach native links without sen
  assert.ok(expanded.includes("Cobrahn's Grasp"));
  assert.ok(vm.evaluate('AzerMind.RichMessage("user",EXPANDED)').includes('|Hazermindinstance:'));
  assert.equal(vm.num('#AzerMind.FilterInstances("", "Raid", "All", nil)'),3);
- assert.equal(vm.num('#AzerMind.FilterInstances("Wailing", "All", "All", 60)'),0);
+ assert.equal(vm.num('#AzerMind.FilterInstances("Wailing Caverns", "All", "All", 60)'),0);
  vm.run('local f=CreateFrame("Frame", "INSTANCE_LINK_TEST", UIParent); AzerMind.SetupLinks(f); local r=AzerMind.FilterInstances("Wailing","All","All")[1]; f.scripts.OnHyperlinkEnter(f,"azermindinstance:"..r.id); f.scripts.OnHyperlinkClick(f,"azermindinstance:"..r.id,"Wailing Caverns","LeftButton")');
  assert.equal(vm.evaluate('AzerMindInstanceDetails:IsShown()'),'true');
  assert.equal(vm.evaluate('AzerMindCopy ~= nil'), 'false');
