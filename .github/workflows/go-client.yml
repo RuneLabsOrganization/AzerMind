@@ -1,0 +1,26 @@
+name: Go client
+on:
+  push:
+    paths:
+      - 'client-go/**'
+      - '.github/workflows/go-client.yml'
+  pull_request:
+    paths:
+      - 'client-go/**'
+      - '.github/workflows/go-client.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client-go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: client-go/go.mod
+          cache-dependency-path: client-go/go.mod
+      - run: go test -race ./...
+      - run: go vet ./...
+      - run: GOOS=windows GOARCH=amd64 go build -o /tmp/AzerMind.exe ./cmd/azermind
