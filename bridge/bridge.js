@@ -400,11 +400,20 @@ function readOutbox() {
 // It is kept in state.json so a restarted bridge still has it, and goes into
 // the agent's system prompt on every run (see protocol.systemPrompt).
 function setContext(job) {
+  const session = job.session || '';
+  const last = state.contextReceipt;
+  // A delayed fragmented control must not replace a newer snapshot or undo
+  // the user's decision to clear shared context.
+  if (last && last.session === session && job.id < last.id) return;
   const text = P.normalizeGameContext(job.ctx);
   const prev = (state.context && state.context.text) || '';
-  if (text === prev) return;
-  state.context = text ? { text, at: Date.now(), session: job.session || '' } : null;
+  const now = Date.now();
+  const changed = text !== prev || (state.context && state.context.session !== session);
+  state.contextReceipt = { at: now, id: job.id, session };
+  if (changed) state.context = text ? { text, at: now, receivedAt: now, session } : null;
+  else if (state.context) state.context.receivedAt = now;
   saveState();
+  if (!changed) return;
   const who = (text.split('\n').find(l => /^Character:/i.test(l)) || text.split('\n')[0] || '').slice(0, 100);
   log(`#${job.id}${job.session ? '@' + job.session : ''} game context ${text ? 'updated: ' + who : 'cleared'}`);
 }
@@ -453,6 +462,27 @@ function allowRules(agentId, rules) {
 // ---------------------------------------------------------------------------
 
 function submit(job) {
+  if (job.hello || job.contextSync) {
+    const duplicate = alreadyHandled(job);
+    if (!duplicate) {
+      if (job.ctx !== undefined) setContext(job);
+      markHandled(job);
+      saveState();
+      if (!job.contextSync) {
+        maybeOfferRestore(job);
+        mapShareUntil = Date.now() + MAP_SHARE_MS;
+      }
+    }
+    // Presence says only that the bridge is alive. This receipt proves it
+    // accepted this exact context-bearing message, including after a retry.
+    signal('ack', job.id, true);
+    publish('context:' + (job.session || ''), {
+      chat: job.chat, id: job.id, session: job.session,
+      status: job.contextSync ? 'context-ack' : 'hello-ack', text: '',
+    }, true);
+    if (!duplicate) log(`${job.contextSync ? 'context sync' : 'hello'} #${job.id} from session ${job.session}`);
+    return;
+  }
   if (job.cancel) {
     const key = chatKey(job);
     const active = running.get(key);
@@ -516,19 +546,6 @@ function submit(job) {
     saveState();
     signal('ack', job.id, true);
     publish(chatKey(job), { chat: job.chat, id: job.id, status: 'ack', text: '', session: job.session }, true);
-    return;
-  }
-  if (job.hello) {
-    // The addon announcing itself: ack, offer a restore if its data is fresh,
-    // and refresh the slots so it can read our clock. No agent run.
-    markHandled(job);
-    saveState();
-    signal('ack', job.id, true);
-    maybeOfferRestore(job);
-    // Even an empty set: a client holding layers from a reset bridge must drop them.
-    mapShareUntil = Date.now() + MAP_SHARE_MS;
-    publishNow();
-    log(`hello from session ${job.session}${pendingRestore ? ' (restore offered)' : ''}`);
     return;
   }
   const key = chatKey(job);

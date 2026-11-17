@@ -9,6 +9,73 @@ const { spawnSync } = require('child_process');
 const P = require('../bridge/protocol');
 const { AGENTS } = require('../bridge/agents');
 
+// Exercise real submit/persistence/reply code without starting capture or AI.
+function contextControls(t) {
+  const vm = require('node:vm');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'azermind-controls-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const addonDir = path.join(dir, 'AddOns');
+  fs.mkdirSync(path.join(addonDir, 'AzerMind', 'ack'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ addonDir, capture: { enabled: false }, primerFile: '', slots: 1 }));
+  const sourceFile = path.join(__dirname, '../bridge/bridge.js');
+  const source = fs.readFileSync(sourceFile, 'utf8');
+  const boundary = source.lastIndexOf('\nfindSavedVars();');
+  assert.ok(boundary > 0);
+  const originalRequire = require('node:module').createRequire(sourceFile);
+  const sandbox = {
+    require: name => name === 'child_process' ? { spawn() { throw Error('A context update must never launch a process'); } } : originalRequire(name),
+    __dirname: dir, process: { ...process, argv: ['node', sourceFile], env: { ...process.env, AZERMIND_PROJECT: dir } },
+    console: { log() {}, error() {} }, Buffer, setTimeout, clearTimeout,
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(source.slice(0, boundary) + '\nglobalThis.acceptContextControl = submit;', sandbox);
+  return job => {
+    sandbox.acceptContextControl(job);
+    return {
+      state: JSON.parse(fs.readFileSync(path.join(dir, 'state.json'), 'utf8')),
+      inbox: fs.readFileSync(path.join(addonDir, 'AzerMind', 'Inbox.lua'), 'utf8'),
+      transcripts: fs.existsSync(path.join(dir, 'transcripts.json')) ? JSON.parse(fs.readFileSync(path.join(dir, 'transcripts.json'), 'utf8')) : null,
+    };
+  };
+}
+
+test('context-only wire flag is recognized and keeps hello compatibility', () => {
+  const job = P.jobsFromStrip(42, ['session', 'chat', '42', '', 'h;u;c', 'Mage', 'Character: Mage, level 39', ''].join('\x1f'))[0];
+  assert.equal(job.contextSync, true);
+  assert.equal(job.hello, true);
+  assert.equal(job.ctx, 'Character: Mage, level 39');
+});
+
+test('hello and passive snapshots receive explicit receipts without AI or chat history', t => {
+  const accept = contextControls(t);
+  const first = accept({ id: 1, session: 'fixture', chat: 'one', hello: true, ctx: 'Character: Mage, level 38', text: '' });
+  assert.match(first.inbox, /status\s*=\s*"hello-ack"/);
+  assert.match(first.inbox, /session\s*=\s*"fixture"/);
+  assert.equal(first.state.contextReceipt.id, 1);
+  const next = accept({ id: 2, session: 'fixture', chat: 'one', hello: true, contextSync: true, ctx: 'Character: Mage, level 39', text: '' });
+  assert.match(next.inbox, /status\s*=\s*"context-ack"/);
+  assert.equal(next.state.context.text, 'Character: Mage, level 39');
+  assert.ok(next.state.context.receivedAt >= next.state.context.at);
+  assert.ok(!next.transcripts || Object.keys(next.transcripts.chats || {}).length === 0);
+  const duplicate = accept({ id: 1, session: 'fixture', chat: 'one', hello: true, ctx: 'Character: Mage, level 38', text: '' });
+  assert.match(duplicate.inbox, /status\s*=\s*"hello-ack"/);
+  assert.equal(duplicate.state.context.text, next.state.context.text);
+  assert.equal(duplicate.state.contextReceipt.id, 2);
+});
+
+test('out-of-order snapshots cannot roll back context and clearing survives stale delivery', t => {
+  const accept = contextControls(t);
+  const send = (id, ctx, session = 'fixture') => accept({ id, session, chat: 'one', hello: true, contextSync: true, ctx, text: '' });
+  const fresh = send(4, 'Character: Mage, level 39');
+  assert.equal(send(3, 'Character: Mage, level 38').state.context.text, fresh.state.context.text);
+  const same = send(5, fresh.state.context.text);
+  assert.equal(same.state.context.at, fresh.state.context.at);
+  assert.ok(same.state.context.receivedAt >= fresh.state.context.receivedAt);
+  assert.equal(send(6, '').state.context, null);
+  assert.equal(send(2, 'Character: Mage, level 37').state.context, null);
+  assert.equal(send(1, 'Character: Other, level 10', 'new-session').state.context.session, 'new-session');
+});
+
 // Run the real context persistence path with an isolated bridge/config/game tree.
 // A deliberately absent project makes the job exit before launching any agent.
 function contextBridge(t) {

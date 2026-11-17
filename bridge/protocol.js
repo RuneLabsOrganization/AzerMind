@@ -127,7 +127,8 @@ function normalizeGameContext(value) {
 }
 
 // Flags field: ';'-separated tokens. "n" = fresh agent session, "h" = hello
-// (no prompt), "d" = the player deleted this chat: forget its transcript and
+// (no prompt), "u" = context-only sync (sent with "h" for older bridges),
+// "d" = the player deleted this chat: forget its transcript and
 // session (no prompt), "allow=Rule1,Rule2" = add these permission rules before
 // running, "c" = the record carries a game-context field before the text (an
 // empty one clears the context the bridge keeps), "agent=codex" = run this
@@ -137,6 +138,7 @@ function parseFlags(flags) {
   for (const tok of String(flags || '').split(';')) {
     if (tok === 'n') out.newSession = true;
     else if (tok === 'h') out.hello = true;
+    else if (tok === 'u') out.contextSync = true;
     else if (tok === 'd') out.forget = true;
     else if (tok === 'c') out.context = true;
     else if (tok === 'settings') out.settings = true;

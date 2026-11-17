@@ -1,0 +1,2 @@
+# Image decoding and visual fixtures used by npm test and the art tools.
+Pillow==12.3.0

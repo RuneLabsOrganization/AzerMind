@@ -8,10 +8,12 @@ const { lua, lauxlib, lualib, to_luastring, to_jsstring } = fengari;
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
 const { execFileSync } = require('child_process');
 
-// Windows decodes with capture.ps1; elsewhere the Python decoder stands in, if python3 is there.
-if (process.platform !== 'win32') {
-  try { execFileSync('python3', ['--version'], { stdio: 'ignore' }); }
-  catch { console.log('SKIP Codec.lua round-trip: python3 is required off Windows.'); process.exit(0); }
+// --python also exercises both portable decoders on a Windows developer machine.
+const windowsDecoder = process.platform === 'win32' && !process.argv.includes('--python');
+const python = process.platform === 'win32' ? 'python' : 'python3';
+if (!windowsDecoder) {
+  try { execFileSync(python, ['--version'], { stdio: 'ignore' }); }
+  catch { console.error('Codec.lua round-trip requires Python 3.'); process.exit(1); }
 }
 
 const CODEC = path.join(__dirname, '..', 'addon', 'AzerMind', 'Codec.lua');
@@ -83,11 +85,11 @@ function render(cells, jitter, gamma, levels) {
 // [name, decoded JSON] per decoder that runs on this platform.
 function decode(file) {
   const last = out => JSON.parse(out.trim().split('\n').pop());
-  if (process.platform === 'win32') {
+  if (windowsDecoder) {
     return [['capture.ps1', last(execFileSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', CAPTURE, '-TestImage', file], { encoding: 'utf8' }))]];
   }
   return [['capture_x11.py', CAPTURE_X11], ['capture_mac.py', CAPTURE_MAC]]
-    .map(([name, script]) => [name, last(execFileSync('python3', [script, '--test-image', file], { encoding: 'utf8' }))]);
+    .map(([name, script]) => [name, last(execFileSync(python, ['-X', 'utf8', script, '--test-image', file], { encoding: 'utf8' }))]);
 }
 
 const cases = [
@@ -100,7 +102,7 @@ const cases = [
   { id: 65000, payload: '\x1F\x1F\x1F\x1F\x1F\x1Fx', jitter: 120, gamma: 1 },
 ];
 const dimLevels = [[0, 64], [0, 64], [0, 64]];
-if (process.platform === 'win32') {
+if (windowsDecoder) {
   cases.push(
   { id: 27, payload: 'x'.repeat(2225), levels: dimLevels },
   { id: 28, payload: 'Canal azul, verde e vermelho — nível variável.', levels: [[6, 44], [75, 172], [36, 106]] },
@@ -129,12 +131,12 @@ const invalid = [
   { name: 'checksum', cells: corruptChecksum, error: 'checksum' },
   { name: 'magic', cells: corruptMagic, error: 'no valid strip in image' },
   { name: 'length', cells: encodeWithLua(23, 'x'.repeat(7200)).slice(0, CELLS), error: 'length' },
+  { name: 'truncated', cells: encodeWithLua(24, 'x'.repeat(72)).slice(0, CELLS), error: 'truncated' },
 ];
-if (process.platform === 'win32') {
+if (windowsDecoder) {
   const corruptFinalMagicBit = encodeWithLua(25, 'magic');
   corruptFinalMagicBit[5] ^= 4;
   invalid.push(
-    { name: 'truncated', cells: encodeWithLua(24, 'x'.repeat(72)).slice(0, CELLS), error: 'truncated' },
     { name: 'dim checksum', cells: corruptChecksum, levels: dimLevels, error: 'checksum' },
     { name: 'dim magic', cells: corruptFinalMagicBit, levels: dimLevels, error: 'no valid strip in image' },
     { name: 'low contrast', cells: encodeWithLua(26, 'contrast'), levels: [[12, 17], [12, 17], [12, 17]], error: 'no valid strip in image' },

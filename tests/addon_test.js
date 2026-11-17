@@ -378,6 +378,11 @@ function nextSlot(vm, luaBody) {
   vm.run(`STUB.onLoadAddOn = function(name) AzerMind_SlotData = ${luaBody} end`);
 }
 
+function nextReceipt(vm, id, status, metadata = '') {
+  const session = vm.evaluate('AzerMindDB.session');
+  nextSlot(vm, `{ now = time(), cwd = "", ${metadata} replies = {{session="${session}",id=${id},status="${status}"}} }`);
+}
+
 function login(vm) {
   vm.run('STUB.FireEvent("ADDON_LOADED", "AzerMind")');
   vm.run('STUB.FireEvent("PLAYER_LOGIN")');
@@ -387,7 +392,7 @@ function login(vm) {
 // what makes the addon consider itself connected (Send is gated on that).
 function connect(vm, metadata = "") {
   vm.run('STUB.RunTimers()'); // C_Timer.After(3, SayHello)
-  nextSlot(vm, `{ now = time(), cwd = "", ${metadata} replies = {} }`);
+  nextReceipt(vm, vm.num('AzerMindDB.lastSeq'), 'hello-ack', metadata);
   vm.run('STUB.now = STUB.now + 6; STUB.Tick()'); // hello poll 5 s later
   assert.equal(vm.evaluate('AzerMind.IsConnected()'), 'true', 'connected after the hello slot');
 }
@@ -639,7 +644,7 @@ test('the game context describes the character and rides on the hello, then only
     'Location: Duskwood - Darkshire',
   ]);
   // The bridge answers the hello: the context is now known to be on its side.
-  nextSlot(vm, '{ now = time(), cwd = "", replies = {} }');
+  nextReceipt(vm, hello.id, 'hello-ack');
   vm.run('STUB.now = STUB.now + 6; STUB.Tick()');
   assert.equal(vm.evaluate('AzerMind.IsConnected()'), 'true');
   vm.run('AzerMind.Send("hello world")');
@@ -803,6 +808,163 @@ test('a message sent while disconnected goes out by itself once the bridge answe
   assert.equal(stripRecords(vm).filter(r => r.text === 'fix the bug').length, 1);
 });
 
+test('hello context waits for its own receipt even after fresh bridge presence', () => {
+  const vm = newVM(); login(vm); connect(vm);
+  vm.run('AzerMind.GameContext=function() return "Character: level 39" .. string.char(10) .. string.rep("x",12000) end; AzerMind.Connect()');
+  const first = decodeStrip(vm);
+  assert.ok(first.text.startsWith('F1\x1F'));
+  assert.ok(Number(first.text.split('\x1F')[4]) > 8);
+  nextSlot(vm, '{now=time(),replies={}}');
+  vm.run('STUB.now=STUB.now+6; STUB.Tick()');
+  assert.equal(vm.evaluate('AzerMind.IsConnected()'), 'true');
+  assert.ok(decodeStrip(vm), 'presence cannot discard an unreceived fragmented hello');
+  nextReceipt(vm, first.id, 'hello-ack');
+  vm.run('STUB.now=STUB.now+4; STUB.Tick()');
+  assert.equal(decodeStrip(vm), null, 'the specific hello receipt ends transmission');
+});
+
+test('unacknowledged hello context is repeated with the next question', () => {
+  const vm = newVM(); login(vm); connect(vm);
+  vm.run('STUB.level=39; AzerMind.Connect()');
+  nextSlot(vm, '{now=time(),replies={}}');
+  vm.run('STUB.now=STUB.now+6; STUB.Tick(); AzerMind.Send("current level?")');
+  assert.match(stripRecords(vm).find(r => r.text === 'current level?').ctx || '', /level 39/);
+});
+
+test('idle character changes stay off the strip until the player asks a question', () => {
+  const vm = newVM(); login(vm); foreverTalents(vm);
+  vm.run('AzerMind.SetContextMode("full")');
+  connect(vm);
+  const initial = vm.num('AzerMindDB.lastSeq');
+  nextSlot(vm, '{now=time(),replies={}}'); // The bridge stays available for its normal presence checks.
+  vm.run(`
+    local gameContext = AzerMind.GameContext
+    STUB.contextReads = 0
+    AzerMind.GameContext = function(...)
+      STUB.contextReads = STUB.contextReads + 1
+      return gameContext(...)
+    end
+  `);
+  for (const [ticks, change] of [
+    [1, 'STUB.level=24'],
+    [9, 'FROST_RANK=4'],
+    [50, 'STUB.zone="Elwynn Forest"; STUB.posX=0.25'],
+  ]) {
+    vm.run(`${change}; for _=1,${ticks} do STUB.now=STUB.now+30; STUB.Tick() end`);
+    assert.equal(vm.evaluate('AzerMind.IsConnected()'), 'true');
+    assert.equal(vm.num('AzerMindDB.lastSeq'), initial, 'character changes do not create an outbound record while idle');
+    assert.equal(decodeStrip(vm), null);
+    assert.equal(vm.num('STUB.contextReads'), 0, 'idle ticks do not collect character context');
+  }
+  vm.run('AzerMind.Send("show my current character")');
+  const question = stripRecords(vm).find(r => r.text === 'show my current character');
+  assert.ok(question, 'the player question goes out on the strip');
+  assert.equal(question.ctx, vm.evaluate('AzerMind.GameContext()'));
+  assert.match(question.ctx, /level 24/);
+  assert.match(question.ctx, /Improved Frostbolt 4\/5/);
+  assert.match(question.ctx, /Position: 25\.0/);
+});
+
+test('hello context accepts only a receipt with the matching session, ID and status', () => {
+  const vm = newVM(); login(vm); connect(vm);
+  vm.run('STUB.level=39; AzerMind.Connect()');
+  const hello = stripRecords(vm).find(r => r.flags === 'h;c');
+  assert.ok(hello);
+  nextSlot(vm, `{now=time(),replies={{session="wrong-session",id=${hello.id},status="hello-ack"},{session="${hello.session}",id=${hello.id+1},status="hello-ack"},{session="${hello.session}",id=${hello.id},status="done"}}}`);
+  vm.run('STUB.level=40; STUB.now=STUB.now+6; STUB.Tick()');
+  assert.ok(decodeStrip(vm), 'other sessions, IDs and receipt types cannot acknowledge the hello');
+  nextReceipt(vm, hello.id, 'hello-ack');
+  vm.run('STUB.now=STUB.now+4; STUB.Tick()');
+  assert.equal(decodeStrip(vm), null);
+  vm.run('AzerMind.Send("current level?")');
+  assert.match(stripRecords(vm).find(r => r.text === 'current level?').ctx, /level 40/);
+});
+
+test('a late older hello receipt cannot replace the newest acknowledged context', () => {
+  const vm = newVM(); login(vm); connect(vm);
+  vm.run('STUB.level=39; AzerMind.Connect()');
+  const older = stripRecords(vm).find(r => r.flags === 'h;c');
+  vm.run('STUB.level=40; AzerMind.Connect()');
+  const newer = stripRecords(vm).find(r => r.flags === 'h;c' && r.id !== older.id);
+  nextReceipt(vm, newer.id, 'hello-ack');
+  vm.run('STUB.now=STUB.now+6; STUB.Tick()');
+  nextReceipt(vm, older.id, 'hello-ack');
+  vm.run('AzerMind.Send("first question"); AzerMind.Send(""); AzerMind.NewChat("second"); AzerMind.Send("still level 40")');
+  assert.equal(stripRecords(vm).find(r => r.text === 'still level 40').ctx, undefined);
+});
+
+test('stale wrapped acknowledgement sounds cannot confirm a new hello', () => {
+  const vm = newVM();
+  vm.run('PlaySoundFile=function(path) return path:find("valid.wav",1,true)~=nil or (STUB.ackSlots and path:find("ack",1,true)~=nil),1 end');
+  login(vm); connect(vm);
+  vm.run('STUB.ackSlots=true; STUB.level=39; AzerMind.Connect(); STUB.now=STUB.now+2; STUB.Tick()');
+  const hello = stripRecords(vm).find(r => r.flags === 'h;c');
+  assert.ok(hello, 'an old sound cannot remove the hello');
+  nextReceipt(vm, hello.id, 'hello-ack');
+  vm.run('STUB.now=STUB.now+4; STUB.Tick()');
+  assert.equal(decodeStrip(vm), null);
+});
+
+test('wrapped acknowledgement sounds cannot discard ordinary sends or resends', () => {
+  for (const resend of [false, true]) {
+    const vm = newVM();
+    vm.run('PlaySoundFile=function(path) return path:find("valid.wav",1,true)~=nil or (STUB.ackSlots and path:find("ack",1,true)~=nil),1 end');
+    login(vm); connect(vm);
+    vm.run('STUB.ackSlots=true; AzerMind.Send(string.rep("x",12000))');
+    if (resend) vm.run('AzerMind.Resend()');
+    assert.ok(decodeStrip(vm).text.startsWith('F1\x1F'));
+    vm.run('STUB.now=STUB.now+2; STUB.Tick()');
+    assert.ok(decodeStrip(vm), 'a stale WAV must not end a fragmented user request');
+  }
+});
+
+test('a pending clear survives disconnection until the next manual Connect', () => {
+  const vm = newVM(); login(vm); connect(vm);
+  vm.run('STUB.onLoadAddOn=nil; STUB.now=STUB.now+2000; STUB.Tick(); AzerMind.SaveContextSettings({},false)');
+  assert.equal(vm.evaluate('AzerMind.IsConnected()'), 'false');
+  const seq = vm.num('AzerMindDB.lastSeq');
+  nextSlot(vm, '{now=time(),replies={}}');
+  vm.run('STUB.now=STUB.now+601; STUB.Tick()');
+  assert.equal(vm.evaluate('AzerMind.IsConnected()'), 'true');
+  assert.equal(vm.num('AzerMindDB.lastSeq'), seq, 'presence alone does not transmit the clear');
+  assert.equal(decodeStrip(vm), null);
+  vm.run('AzerMind.Connect()');
+  assert.ok(stripRecords(vm).some(r => r.flags === 'h;c' && r.ctx === ''), 'the next explicit hello carries the clear');
+});
+
+test('a question carries a pending clear before its standalone receipt arrives', () => {
+  const vm = newVM(); login(vm); connect(vm);
+  vm.run('AzerMind.SaveContextSettings({},false); AzerMind.Send("answer without my character context")');
+  assert.equal(stripRecords(vm).find(r => r.text === 'answer without my character context').ctx, '');
+});
+
+test('reducing shared fields replaces pending hello data with newly filtered data', () => {
+  const vm = newVM(); login(vm); connect(vm);
+  vm.run('AzerMindDB.settings.contextFields={spells=true}; AzerMind.GameContext=function() return AzerMind.ContextOptions().spells and "PRIVATE-SPELLS" or "ONLY-CHARACTER" end; AzerMind.Connect()');
+  const pending = stripRecords(vm).find(r => r.flags === 'h;c');
+  assert.equal(pending.ctx, 'PRIVATE-SPELLS');
+  vm.run('AzerMind.SaveContextSettings({spells=false},true)');
+  const records = stripRecords(vm);
+  assert.ok(!records.some(r => r.id === pending.id), 'revoked fields leave the strip immediately');
+  assert.ok(records.some(r => r.ctx === 'ONLY-CHARACTER'));
+});
+
+test('turning off sharing cancels pending hello data and sends the clear immediately', () => {
+  for (const disable of [
+    'AzerMind.SaveContextSettings(AzerMind.ContextOptions(),false)',
+    'SlashCmdList.AZERMIND("context off")',
+  ]) {
+    const vm = newVM(); login(vm); connect(vm);
+    vm.run('STUB.level=39; AzerMind.Connect()');
+    const pending = stripRecords(vm).find(r => r.flags === 'h;c');
+    assert.match(pending.ctx, /level 39/);
+    vm.run(disable);
+    const records = stripRecords(vm);
+    assert.ok(!records.some(r => r.id === pending.id), 'the old shared snapshot is removed');
+    assert.ok(records.some(r => r.flags === 'h;c' && r.ctx === ''), 'the bridge receives a clear');
+  }
+});
+
 for (const trigger of ['login', 'Connect']) {
   test(`a delayed bridge answer connects after the first ${trigger} hello slot was stale`, () => {
     const vm = newVM();
@@ -816,7 +978,7 @@ for (const trigger of ['login', 'Connect']) {
     vm.run('for i = 1, 3 do STUB.now = STUB.now + 2; STUB.Tick() end');
     assert.equal(vm.evaluate('AzerMind.IsConnected()'), 'false', 'the first hello slot was stale');
 
-    nextSlot(vm, '{ now = time(), replies = {} }');
+    nextReceipt(vm, vm.num('AzerMindDB.lastSeq'), 'hello-ack');
     vm.run('for i = 1, 2 do STUB.now = STUB.now + 2; STUB.Tick() end');
     assert.equal(vm.evaluate('AzerMind.IsConnected()'), 'true', 'the next hello slot sees the bridge');
     vm.run('STUB.onLoadAddOn = function() error("hello polled after the fresh reply") end');
@@ -973,7 +1135,7 @@ test('a chat can pick its agent: the strip says so, replies are labelled by thei
   // The hello slot carries the bridge's default agent and the ones it knows.
   vm.run('STUB.RunTimers()');
   const slot = replies => `{ now = time(), cwd = "", agent = "claude", agents = { "claude", "codex", "grok" }, replies = { ${replies || ''} } }`;
-  nextSlot(vm, slot());
+  nextSlot(vm, slot(`{session="${vm.evaluate('AzerMindDB.session')}",id=${vm.num('AzerMindDB.lastSeq')},status="hello-ack"}`));
   vm.run('STUB.now = STUB.now + 6; STUB.Tick()');
   assert.equal(vm.evaluate('AzerMind.IsConnected()'), 'true');
   const texts = () => vm.evaluate('table.concat(STUB.texts, "|")');

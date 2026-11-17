@@ -60,12 +60,12 @@ def has_magic(px, ox, oy):
     return (acc >> 2) == 0xC71A
 
 
-def decode(px, ox=0, oy=0):
+def decode(px, ox=0, oy=0, available_rows=MAXROWS):
     acc = 0
     nbits = 0
     out = bytearray()
     needed = 6
-    total = CELLS * MAXROWS
+    total = CELLS * min(MAXROWS, available_rows)
     for i in range(total):
         acc = (acc << 3) | cell_value(px, i % CELLS, i // CELLS, ox, oy)
         nbits += 3
@@ -78,7 +78,7 @@ def decode(px, ox=0, oy=0):
             if len(out) == 6:
                 length = out[4] * 256 + out[5]
                 needed = 8 + length
-                if needed > total * 3 // 8:
+                if needed > CELLS * MAXROWS * 3 // 8:
                     return {"error": "length"}
             if len(out) >= needed:
                 break
@@ -102,10 +102,10 @@ def find_and_decode(px, width, height, hint):
     cands = [hint] if hint else []
     cands += [(dx, dy) for dy in range(SLACK + 1) for dx in range(SLACK + 1)]
     for ox, oy in cands:
-        if ox + W > width or oy + H > height:
+        if ox + W > width or oy + CELL > height:
             continue
         if has_magic(px, ox, oy):
-            return decode(px, ox, oy), (ox, oy)
+            return decode(px, ox, oy, (height - oy) // CELL), (ox, oy)
     return None, hint
 
 
