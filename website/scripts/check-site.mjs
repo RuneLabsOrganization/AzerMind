@@ -1,0 +1,17 @@
+import {readFileSync,existsSync} from 'node:fs';
+import {join,dirname} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import assert from 'node:assert/strict';
+const root=join(dirname(fileURLToPath(import.meta.url)),'..');
+const html=readFileSync(join(root,'index.html'),'utf8');
+const css=readFileSync(join(root,'styles.css'),'utf8');
+const js=readFileSync(join(root,'script.js'),'utf8');
+const sections=['recursos','demonstracao','como-instalar','download','atualizacoes','agentes','faq'];
+for (const id of sections) assert.match(html,new RegExp(`id="${id}"`),`missing ${id}`);
+for (const item of html.matchAll(/(?:src|href)="(assets\/[^"#]+)"/g)) assert.ok(existsSync(join(root,item[1])),`missing ${item[1]}`);
+for (const id of ['mobile-toggle','site-menu','preview-dialog','open-preview','client-download','addon-download','release-notice','changelog-list','copy-commands']) assert.match(html,new RegExp(`id="${id}"`),`missing interaction target ${id}`);
+for (const token of ['@media(max-width:930px)','@media(max-width:600px)','prefers-reduced-motion']) assert.ok(css.includes(token));
+assert.ok(js.includes('api.github.com/repos/') && js.includes('browser_download_url'));
+assert.ok(js.includes('textContent') && !js.includes('innerHTML='));
+assert.ok(!html.includes('v1.4.2') && !html.includes('127,6 MB'));
+console.log('Website checks passed: sections, assets, interactions, responsive CSS and release integration.');
