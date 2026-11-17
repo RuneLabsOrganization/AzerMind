@@ -1,5 +1,10 @@
 # AzerMind — Official landing page
 
+## Languages
+
+The landing page is fully localized for **English (EN)**, **Português (PT)** and **Español (ES)**. A language switcher appears in the main navigation on desktop and mobile. The browser language is detected for the first visit (English is the fallback), and manual selections are saved locally. You may also use `?lang=en`, `?lang=pt` or `?lang=es` to override the initial language. The translation dictionary is maintained in `i18n.js`, including headings, descriptions, accessibility labels and release notices. Dates and file sizes are formatted for the selected locale. Release notes published by third parties on GitHub remain in their original language.
+
+
 A complete, responsive, Portuguese-language landing page designed around the **actual AzerMind addon UI** and its leather, parchment, burgundy, ivory, and aged-bronze visual identity.
 
 ## Run locally

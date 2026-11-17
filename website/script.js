@@ -10,6 +10,8 @@
     changes: `${GITHUB}/blob/main/CHANGELOG.md`,
   };
   const $ = id => document.getElementById(id);
+  const t = key => window.AzerMindI18n?.t(key) || key;
+  const locale = () => window.AzerMindI18n?.locale || 'pt-BR';
   const client = $('client-download');
   const addon = $('addon-download');
   const notice = $('release-notice');
@@ -18,14 +20,14 @@
   let fetchStatus = 'loading';
   let activeChannel = 'stable';
 
-  const datePT = value => {
+  const localDate = value => {
     if (!value) return '';
     const d = new Date(value);
-    return isNaN(d.getTime()) ? '' : new Intl.DateTimeFormat('pt-BR', {day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}).format(d);
+    return isNaN(d.getTime()) ? '' : new Intl.DateTimeFormat(locale(), {day:'numeric',month:'long',year:'numeric',timeZone:'UTC'}).format(d);
   };
   const bytes = n => {
     if (!Number.isFinite(n) || n <= 0) return '';
-    return n < 1048576 ? `${Math.round(n/1024)} KB` : `${(n/1048576).toFixed(1).replace('.',',')} MB`;
+    return n < 1048576 ? `${Math.round(n/1024)} KB` : `${(n/1048576).toLocaleString(locale(),{minimumFractionDigits:1,maximumFractionDigits:1})} MB`;
   };
   const releaseAsset = (release, type) => {
     const files = Array.isArray(release.assets) ? release.assets : [];
@@ -40,48 +42,57 @@
     const name = $(labelID);
     const sub = $(subtitleID);
     element.href = asset ? asset.browser_download_url : sourceURL;
-    name.textContent = asset ? asset.name : sourceLabel;
-    sub.textContent = asset ? `Arquivo de release · ${bytes(asset.size)}` : sourceSubtitle;
+    name.textContent = asset ? asset.name : t(sourceLabel);
+    sub.textContent = asset ? `${t('Arquivo de release')} · ${bytes(asset.size)}` : t(sourceSubtitle);
     element.querySelector('.package-arrow').textContent = asset ? '↓' : '↗';
   };
   const releaseList = channel => releases.filter(r => !r.draft && Boolean(r.prerelease) === (channel === 'prerelease'));
+
+  const releaseMessage = (key, version) => {
+    const templates = {
+      'available': {pt:'Pacotes oficiais disponíveis em {ver}.',en:'Official packages available for {ver}.',es:'Paquetes oficiales disponibles para {ver}.'},
+      'partial': {pt:'Release {ver} publicada. Alguns pacotes não foram identificados automaticamente; confira os arquivos oficiais.',en:'Release {ver} published. Some packages could not be identified automatically; check the official files.',es:'Versión {ver} publicada. Algunos paquetes no se pudieron identificar automáticamente; consulta los archivos oficiales.'}
+    };
+    const lang = window.AzerMindI18n?.language || 'pt';
+    return (templates[key][lang] || templates[key].pt).replace('{ver}',version);
+  };
 
   function renderDownloads() {
     const release = releaseList(activeChannel)[0];
     const beta = activeChannel === 'prerelease';
     const tag = $('release-tag');
     if (release) {
-      const ver = release.tag_name || release.name || 'Versão publicada';
+      const ver = release.tag_name || release.name || t('Versão publicada');
       const clientAsset = releaseAsset(release, 'client');
       const addonAsset = releaseAsset(release, 'addon');
-      $('release-subtitle').textContent = `${ver} · ${datePT(release.published_at) || 'Versão publicada'}`;
-      $('hero-version').textContent = `${ver} · ${beta ? 'Beta' : 'Estável'}`;
-      tag.textContent = beta ? 'Beta' : 'Estável';
+      $('release-subtitle').textContent = `${ver} · ${localDate(release.published_at) || t('Versão publicada')}`;
+      $('hero-version').textContent = `${ver} · ${beta ? 'Beta' : t('Estável')}`;
+      tag.textContent = beta ? 'Beta' : t('Estável');
       tag.className = 'tag tag-live';
       setPackage(client, 'client-label', 'client-subtitle', clientAsset,
         release.html_url || `${GITHUB}/releases`, 'AzerMind — ver arquivos da release', 'Nenhum instalador de cliente identificado');
       setPackage(addon, 'addon-label', 'addon-subtitle', addonAsset,
         release.html_url || `${GITHUB}/releases`, 'Addon — ver arquivos da release', 'Nenhum pacote de addon identificado');
-      notice.textContent = clientAsset && addonAsset ? `Pacotes oficiais disponíveis em ${ver}.` : `Release ${ver} publicada. Alguns pacotes não foram identificados automaticamente; confira os arquivos oficiais.`;
+      notice.textContent = releaseMessage(clientAsset && addonAsset ? 'available' : 'partial',ver);
     } else {
-      tag.textContent = 'Código-fonte';
+      tag.textContent = t('Código-fonte');
       tag.className = 'tag tag-source';
-      $('release-subtitle').textContent = 'Versão no repositório · v0.5.0';
-      $('hero-version').textContent = 'Código-fonte disponível';
+      $('release-subtitle').textContent = `${t('Versão no repositório')} · v0.5.0`;
+      $('hero-version').textContent = t('Código-fonte disponível');
       setPackage(client, 'client-label','client-subtitle',null,fallback.client,'AzerMind — código-fonte','Projeto completo · ZIP · Requer Node.js');
       setPackage(addon, 'addon-label','addon-subtitle',null,fallback.addon,'Addon — WoW Forever','Módulos incluídos no repositório');
-      if (fetchStatus === 'error') notice.textContent = 'Não foi possível consultar as releases agora. Confira os downloads diretamente no GitHub.';
-      else if (beta) notice.textContent = 'Nenhuma release beta publicada neste canal. Você pode acessar o código-fonte ou conferir as versões no GitHub.';
-      else notice.textContent = 'Ainda não há pacotes de release publicados. O código-fonte está disponível no GitHub.';
+      if (fetchStatus === 'error') notice.textContent = t('Não foi possível consultar as releases agora. Confira os downloads diretamente no GitHub.');
+      else if (beta) notice.textContent = t('Nenhuma release beta publicada neste canal. Você pode acessar o código-fonte ou conferir as versões no GitHub.');
+      else notice.textContent = t('Ainda não há pacotes de release publicados. O código-fonte está disponível no GitHub.');
     }
   }
 
   function renderChangelog() {
     const latest = releases.filter(r => !r.draft)[0];
     if (!latest) return;
-    const ver = latest.tag_name || latest.name || 'Versão publicada';
+    const ver = latest.tag_name || latest.name || t('Versão publicada');
     $('changelog-version').textContent = ver;
-    $('changelog-date').textContent = datePT(latest.published_at) || '';
+    $('changelog-date').textContent = localDate(latest.published_at) || '';
     $('changelog-source').textContent = 'GitHub Releases';
     $('changelog-link').href = latest.html_url || fallback.changes;
     const notes = (latest.body || '').split('\n').map(s => s.trim())
@@ -111,6 +122,11 @@
       renderChangelog();
     }
   }
+  window.addEventListener('azermind:languagechange',() => {
+    renderDownloads();
+    renderChangelog();
+    // GitHub release notes come from their authors and are not machine translated.
+  });
   switchers.forEach(button => button.addEventListener('click',() => {
     activeChannel = button.dataset.channel;
     switchers.forEach(b => {const on = b === button; b.classList.toggle('active',on); b.setAttribute('aria-pressed',String(on));});
@@ -146,10 +162,10 @@
         const helper=document.createElement('textarea');helper.value=value;helper.style.position='fixed';helper.style.opacity='0';document.body.append(helper);helper.select();
         const ok=document.execCommand('copy');helper.remove();if(!ok) throw new Error('Clipboard denied');
       }
-      copy.textContent='✓ Copiado!';
-      setTimeout(()=>{copy.textContent='⧉ Copiar comandos';},1800);
+      copy.textContent=t('✓ Copiado!');
+      setTimeout(()=>{copy.textContent=t('⧉ Copiar comandos');},1800);
     } catch (_) {
-      copy.textContent='Selecione e copie abaixo';
+      copy.textContent=t('Selecione e copie abaixo');
     }
   });
 })();
