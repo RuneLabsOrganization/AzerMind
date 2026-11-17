@@ -49,3 +49,6 @@ Semantic sections, descriptive alt text, keyboard-operable navigation and screen
 AzerMind repository: <https://github.com/mateusmaaia/AzerMind-wow>
 
 AzerMind is an independent community addon. It is not affiliated with Blizzard Entertainment. This website credits the upstream project and does not bundle third-party game assets.
+### Hero banner illustration
+
+The hero background `assets/hero-arcane-library.webp` is an optimized original arcane-library illustration with subtle code motifs. The readable text and UI remain native HTML, above layered CSS gradients rather than baked into the image. The focal point is adjusted for narrow screens. The original screenshot preview is unchanged.

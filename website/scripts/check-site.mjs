@@ -6,6 +6,8 @@ const root=join(dirname(fileURLToPath(import.meta.url)),'..');
 const html=readFileSync(join(root,'index.html'),'utf8');
 const css=readFileSync(join(root,'styles.css'),'utf8');
 const js=readFileSync(join(root,'script.js'),'utf8');
+assert.ok(css.includes("url('assets/hero-arcane-library.webp')"),'new hero background must be wired into CSS');
+assert.ok(existsSync(join(root,'assets/hero-arcane-library.webp')),'hero background asset must exist');
 const i18n=readFileSync(join(root,'i18n.js'),'utf8');
 const sections=['recursos','demonstracao','como-instalar','download','atualizacoes','agentes','faq'];
 for (const id of sections) assert.match(html,new RegExp(`id="${id}"`),`missing ${id}`);
