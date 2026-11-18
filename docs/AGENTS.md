@@ -32,11 +32,11 @@ Codex also checks `CODEX_BIN` before searching `PATH`, so a newer launcher can o
 ## Claude Code
 
 - **Install:** [claude.com/claude-code](https://claude.com/claude-code). Run `claude` once and log in. `claude --version` must work in a terminal.
-- **Command line:** `claude -p --output-format stream-json --verbose --permission-mode <mode> --allowedTools <rules…> [--model <m>] [--resume <session>] [--append-system-prompt <context>]`, prompt on stdin. The `CLAUDECODE` variable is removed from the environment so a bridge started from inside a Claude Code session can still launch it.
+- **Command line:** `claude -p --output-format stream-json --verbose --permission-mode <mode> --allowedTools <rules…> [--model <m>] [--resume <session>] [--append-system-prompt <instructions>]`, current character snapshot and player prompt on stdin. The `CLAUDECODE` variable is removed from the environment so a bridge started from inside a Claude Code session can still launch it.
 - **Permissions:** `permissionMode` and `allowedTools` are Claude's own concepts, passed as they are. Denied tools come back in the result as `permission_denials`; the bridge turns them into rules (`Bash(cargo:*)`, `WebSearch`) for the **Allow & retry** button.
 - **Session:** the `session_id` on the stream; `--resume` on later runs. Claude keeps sessions per folder.
 - **Progress:** one line per `tool_use` block (`edit player.gd`, `$ npm test`, `search: …`) and each text block as a snippet.
-- **Context:** the game context and primer go in as a system prompt, on every run.
+- **Context:** the current game snapshot precedes the player's question on stdin in a labeled bridge-context block on every run, including resumed sessions. Reply rules, applicable guide policies, map/macro instructions and the addon primer remain in the system prompt. This makes current character data explicit in the conversation, keeps the raw snapshot out of Windows command-line arguments, and preserves the primer for sessions started before this delivery change. Earlier snapshots are historical; missing or partial fields must not be filled from old character data.
 
 ## Codex
 

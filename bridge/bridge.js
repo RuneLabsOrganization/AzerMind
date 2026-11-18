@@ -396,9 +396,9 @@ function readOutbox() {
 }
 
 // The addon sends the player's in-game context (character, location, ...) with
-// its hello and again whenever it changes; an empty one means "context off".
+// its hello and with player questions when it changes; empty means "context off".
 // It is kept in state.json so a restarted bridge still has it, and goes into
-// the agent's system prompt on every run (see protocol.systemPrompt).
+// each agent request (see protocol.systemPrompt and agents.js).
 function setContext(job) {
   const session = job.session || '';
   const last = state.contextReceipt;
@@ -637,11 +637,11 @@ function runJob(job) {
   const resume = state.sessions[skey] || state.sessions[key];
 
   const ctx = gameContext();
-  const system = P.systemPrompt(ctx, primer());
+  const system = P.systemPrompt(ctx, primer(), { snapshotInTurn: agentId === 'claude' });
   const systemShort = P.systemPrompt(ctx, '');
   const promptFile = path.join(TMP_DIR, `prompt-${job.id}-${Date.now().toString(36)}.txt`);
   const researchPrompt = job.text + Wowhead.references(ctx, job.text);
-  const input = agent.input({ prompt: researchPrompt, system, systemShort, resume, cfg: acfg });
+  const input = agent.input({ prompt: researchPrompt, system, systemShort, gameContext: ctx, resume, cfg: acfg });
   if (input.promptFile !== undefined) {
     try { fs.mkdirSync(TMP_DIR, { recursive: true }); fs.writeFileSync(promptFile, input.promptFile); }
     catch (e) { finish(job, 'error', `Could not write the prompt file ${promptFile}: ${e.message}`); return; }
