@@ -16,6 +16,14 @@ This transport still requires the helper and a visible, unobstructed pixel strip
 
 An earlier version transmitted changed character context every 30 seconds, so ordinary gameplay repeatedly displayed the pixel strip. Automatic character-context synchronization is now disabled entirely. Fresh shared data accompanies user questions; login/Connect and explicitly changing sharing settings still use control handshakes. Install the updated existing `AzerMind.lua` and use `/reload` when safe. No bridge restart is needed. Between user actions, the saved context can be old; ask a new question or click Connect to refresh it.
 
+### Claude says talents are missing even though the bridge received them
+
+If `bridge/state.json` contains the current `Character:`, `Talents:`, `Unspent talent points:` and `Purchased talent ranks:` lines, but a resumed Claude chat denies receiving them or uses an older build, the failure may be after addon-to-bridge delivery. In an observed case, the bridge received the new snapshot before dispatch; Claude reused older character details until the player pasted the current snapshot into the question. The transcript does not establish whether the CLI omitted the system-prompt argument or the model failed to use it.
+
+The bridge now includes the current snapshot in a labeled context block alongside every question sent to Claude, including resumed conversations. Static instructions and the addon/macro primer remain in the system prompt. Current data takes precedence over historical snapshots, and turning sharing off does not resend cached character data. This changes AI-request delivery only; it does not add background character scans or pixel transmissions.
+
+Update and restart the bridge. No addon update, `/reload`, character-data copy/paste or new chat is required for this fix. Ask a new question to verify the actual response; an older reply will not change. When sharing diagnostics, redact private paths, identifiers and chat text.
+
 ## Sending message stalls on Windows
 
 On an affected Windows setup, the addon can stay on **Sending message** while the pixel strip is visible and the bridge reports `capture: attached to ...`. The console may show repeated `strip seen but rejected: checksum` warnings or no matching `strip #N` line. A green connection light means the addon has recently heard from the bridge through a reply slot or presence signal. A matching `(pixel) ... starting` line confirms that an outgoing request reached the bridge.

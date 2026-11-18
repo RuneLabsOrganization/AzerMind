@@ -119,6 +119,67 @@ test('bridge persists quest and equipment context after 2000 characters, then cl
   assert.equal(receive(''), null, 'context off clears the persisted text');
 });
 
+test('bridge delivers current talent snapshots to Claude stdin on fresh and resumed requests', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'azermind-claude-context-'));
+  t.after(() => {
+    assert.ok(path.resolve(dir).startsWith(path.resolve(os.tmpdir()) + path.sep));
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+  const bridge = path.join(dir, 'bridge');
+  const addonDir = path.join(dir, 'AddOns');
+  const saved = path.join(dir, 'SavedVariables.lua');
+  const fakeAgent = path.join(dir, 'fake-claude.js');
+  const delivered = path.join(dir, 'delivered.json');
+  const primer = path.join(dir, 'primer.md');
+  fs.mkdirSync(bridge);
+  fs.mkdirSync(path.join(addonDir, 'AzerMind'), { recursive: true });
+  for (const file of fs.readdirSync(path.join(__dirname, '..', 'bridge'))) {
+    if (file.endsWith('.js')) fs.copyFileSync(path.join(__dirname, '..', 'bridge', file), path.join(bridge, file));
+  }
+  fs.writeFileSync(primer, '# Test addon primer');
+  fs.writeFileSync(fakeAgent, `const fs = require('fs');
+    let stdin = ''; process.stdin.setEncoding('utf8');
+    process.stdin.on('data', chunk => stdin += chunk);
+    process.stdin.on('end', () => {
+      fs.writeFileSync(${JSON.stringify(delivered)}, JSON.stringify({ stdin, args: process.argv.slice(2) }));
+      console.log(JSON.stringify({ type: 'result', session_id: 'fixture-claude-session', result: 'OK', is_error: false }));
+    });`);
+  fs.writeFileSync(path.join(bridge, 'config.json'), JSON.stringify({
+    addonDir, savedVariablesFile: saved, defaultCwd: dir, capture: { enabled: false },
+    primerFile: primer, slots: 1, actMax: 1, timeoutMs: 5000,
+    agents: { claude: { path: fakeAgent } },
+  }));
+  const snapshots = [
+    'Character: Testchar, level 38 Mage\nPurchased talent ranks: Precision 2/3',
+    'Character: Testchar, level 42 Mage\nTalents: Frost 32\nUnspent talent points: 1\nPurchased talent ranks: Winter\'s Chill 5/5, Precision 2/3',
+    '',
+  ];
+  for (let i = 0; i < snapshots.length; i++) {
+    const ctx = snapshots[i];
+    const question = 'Which talents do I have?';
+    fs.writeFileSync(saved, `AzerMindDB = { ["outbox"] = { ["id"] = ${i + 1}, ["session"] = "fixture", ["text"] = "${Buffer.from(question).toString('hex')}", ["ctx"] = "${Buffer.from(ctx).toString('hex')}" } }`);
+    const run = spawnSync(process.execPath, [path.join(bridge, 'bridge.js'), '--once'], {
+      cwd: dir, encoding: 'utf8', timeout: 10000,
+      env: { ...process.env, AZERMIND_PROJECT: dir },
+    });
+    assert.ifError(run.error);
+    assert.equal(run.status, 0, run.stdout + run.stderr);
+    const { stdin, args } = JSON.parse(fs.readFileSync(delivered, 'utf8'));
+    assert.equal(args.includes('--resume'), i > 0, 'the same Claude session is resumed');
+    assert.ok(stdin.endsWith(question), 'question remains outside the context block');
+    const system = args[args.indexOf('--append-system-prompt') + 1];
+    assert.equal(system.includes('# Test addon primer'), Boolean(ctx));
+    if (ctx) {
+      assert.ok(stdin.includes(ctx), 'actual child process receives all current talent ranks');
+      assert.ok(!system.includes(ctx), 'raw snapshot is absent from system argv');
+      if (i > 0) assert.ok(!stdin.includes(snapshots[0]));
+    } else {
+      assert.equal(stdin, question, 'disabling sharing does not reuse cached character data');
+      assert.ok(system.includes('Earlier snapshots are historical'));
+    }
+  }
+});
+
 test('normalizeGameContext preserves the full supported UTF-8 budget and normalizes whitespace', () => {
   const ctx = 'á'.repeat(7000);
   assert.equal(P.normalizeGameContext(' \r\n' + ctx + '\r\n '), ctx);

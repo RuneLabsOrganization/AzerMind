@@ -28,7 +28,7 @@ test('agent ids, display names and the legacy Claude config keys', () => {
   assert.deepEqual(A.agentConfig({ agents: { grok: { model: 'grok-build' } } }, 'grok'), { model: 'grok-build' });
 });
 
-test('Claude Code: headless stream-json with the allowlist, resume and system prompt; prompt on stdin', () => {
+test('Claude Code: headless stream-json with the allowlist, resume and system instructions; prompt on stdin', () => {
   const cfg = { permissionMode: 'acceptEdits', allowedTools: ['WebSearch', 'Bash(git:*)'], model: 'opus' };
   const args = A.AGENTS.claude.args({ cfg, resume: 'sess-1', system: SYS, cwd: 'C:\\p' });
   assert.deepEqual(args, ['-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'acceptEdits',
@@ -39,6 +39,44 @@ test('Claude Code: headless stream-json with the allowlist, resume and system pr
   const env = A.AGENTS.claude.env({ CLAUDECODE: '1', PATH: 'x' });
   assert.equal(env.CLAUDECODE, undefined);
   assert.equal(env.PATH, 'x');
+});
+
+test('Claude carries fresh character data in each turn, including resumed sessions and context cleared by the player', () => {
+  const P = require('../bridge/protocol');
+  const prompt = 'Which talents do I have?';
+  const oldContext = 'Character: Testchar, level 38 Mage\nTalents: Frost 29';
+  const currentContext = "Character: Testchar, level 42 Mage\nTalents: Frost 32\nUnspent talent points: 1\nPurchased talent ranks: Winter's Chill 5/5, Precision 2/3";
+  const primer = '# Addon primer';
+  const turn = (gameContext, resume) => {
+    const system = P.systemPrompt(gameContext, primer, { snapshotInTurn: true });
+    const opts = { cfg: {}, prompt, resume, images: ['test.png'], gameContext, system };
+    return { stdin: A.AGENTS.claude.input(opts).stdin, args: A.AGENTS.claude.args(opts), system };
+  };
+
+  assert.ok(turn(oldContext, '').stdin.includes(oldContext));
+  for (const resume of ['', 'existing-session']) {
+    const { stdin, args, system } = turn(currentContext, resume);
+    assert.ok(stdin.startsWith('[Context from the AzerMind bridge, not written by the user]'));
+    assert.ok(stdin.includes(currentContext), 'complete current snapshot travels in stdin, including named ranks');
+    assert.ok(!stdin.includes(oldContext), 'the new turn does not reuse an earlier snapshot');
+    assert.ok(stdin.indexOf(currentContext) < stdin.indexOf('[End of context]\n\n' + prompt));
+    assert.ok(system.includes(primer), 'primer remains available even in pre-update resumed sessions');
+    assert.ok(!system.includes(currentContext) && !args.join(' ').includes(currentContext), 'snapshot is sent only once');
+    assert.ok(stdin.includes('Attached screenshots: test.png'), 'screenshot instructions survive');
+    const cleared = turn('', resume);
+    assert.ok(!cleared.stdin.includes('Purchased talent ranks:') && !cleared.system.includes(primer));
+    assert.ok(cleared.system.includes('Earlier snapshots are historical'), 'clearing sharing cannot make historical data current');
+  }
+  assert.equal(A.AGENTS.claude.input({ prompt, gameContext: '', resume: 'existing-session' }).stdin, prompt);
+});
+
+test('Claude keeps large game snapshots intact on stdin without enlarging Windows process arguments', () => {
+  const P = require('../bridge/protocol');
+  const gameContext = 'Character: Testchar\n' + 'Equipment details. '.repeat(2100) + '\nPurchased talent ranks: Precision 3/3';
+  const system = P.systemPrompt(gameContext, '# Primer', { snapshotInTurn: true });
+  const opts = { cfg: {}, prompt: 'Check my character.', system, gameContext, resume: 'existing-session' };
+  assert.ok(A.AGENTS.claude.input(opts).stdin.includes(gameContext), 'full snapshot remains intact');
+  assert.ok(A.AGENTS.claude.args(opts).join(' ').length < 8000, 'large snapshot is not in argv');
 });
 
 test('Codex: exec --json in the chat folder, sandbox from permissionMode, resume as a subcommand, prompt on stdin with the context on top', () => {

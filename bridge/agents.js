@@ -330,8 +330,9 @@ function hermesParser() {
 // The table
 // ---------------------------------------------------------------------------
 
-// The "system prompt" is the game context and the addon primer. Claude and Grok
-// take it as a real system prompt; Codex has no such flag, so it rides at the
+// Claude takes instructions and the addon primer as a system prompt, but the
+// changing character snapshot travels in each turn's stdin, including resumes.
+// Grok takes both as a system prompt; Codex has no such flag, so it rides at the
 // top of the prompt, marked as context, in full for a new session and as the
 // short context-only version on a resumed one (the primer is already in the
 // thread).
@@ -358,9 +359,9 @@ const AGENTS = {
       if (system) a.push('--append-system-prompt', system);
       return a.concat(Array.isArray(cfg.extraArgs) ? cfg.extraArgs : []);
     },
-    input: ({ prompt, images }) => {
+    input: ({ prompt, gameContext, images }) => {
       const attached = images && images.length ? `\n\nAttached screenshots: ${images.join(', ')} — read them with your Read tool` : '';
-      return { stdin: prompt + attached };
+      return { stdin: (gameContext ? contextBlock(gameContext) : '') + prompt + attached };
     },
     env: (env) => { delete env.CLAUDECODE; return env; }, // a bridge started from inside Claude Code can still launch it
     parser: claudeParser,
